@@ -24,6 +24,7 @@ from plane.db.models import (
     UserNotificationPreference,
     ProjectMember,
 )
+from django.db import transaction
 from django.db.models import Subquery
 
 # Third Party imports
@@ -187,8 +188,34 @@ def create_mention_notification(project, notification_comment, issue, actor_id, 
     )
 
 
-@shared_task
-def notifications(
+def _effect_key(publication_key, effect, receiver_id, activity_id):
+    return f"{publication_key}:{effect}:{receiver_id}:{activity_id}"
+
+
+def _apply_effect_keys(bulk_notifications, bulk_email_logs, publication_key):
+    if not publication_key:
+        return
+    for notification in bulk_notifications:
+        activity = (notification.data or {}).get("issue_activity", {})
+        effect = "mention" if notification.sender.endswith(":mentioned") else "notification"
+        notification.idempotency_key = _effect_key(
+            publication_key,
+            effect,
+            notification.receiver_id,
+            activity.get("id"),
+        )
+    for email_log in bulk_email_logs:
+        activity = (email_log.data or {}).get("issue_activity", {})
+        email_log.idempotency_key = _effect_key(
+            publication_key,
+            "email",
+            email_log.receiver_id,
+            activity.get("id"),
+        )
+
+
+@transaction.atomic
+def run_notifications(
     type,
     issue_id,
     project_id,
@@ -197,11 +224,17 @@ def notifications(
     issue_activities_created,
     requested_data,
     current_instance,
+    idempotency_key=None,
+    activity_id=None,
 ):
     try:
         issue_activities_created = (
             json.loads(issue_activities_created) if issue_activities_created is not None else None
         )
+        if activity_id is not None and not any(
+            str(activity.get("id")) == str(activity_id) for activity in (issue_activities_created or [])
+        ):
+            raise ValueError("Notification payload does not carry its durable activity identity")
         if type not in [
             "cycle.activity.created",
             "cycle.activity.deleted",
@@ -320,7 +353,8 @@ def notifications(
 
                 for issue_activity in issue_activities_created:
                     # If activity done in blocking then blocked by email should not go
-                    if issue_activity.get("issue_detail").get("id") != issue_id:
+                    issue_detail = issue_activity.get("issue_detail")
+                    if issue_detail and issue_detail.get("id") != issue_id:
                         continue
 
                     # Do not send notification for description update
@@ -458,7 +492,12 @@ def notifications(
                 ignore_conflicts=True,
             )
 
-            last_activity = IssueActivity.objects.filter(issue_id=issue_id).order_by("-created_at").first()
+            if activity_id is not None:
+                last_activity = IssueActivity.objects.filter(pk=activity_id).first()
+                if last_activity is None:
+                    raise ValueError("Notification activity does not exist")
+            else:
+                last_activity = IssueActivity.objects.filter(issue_id=issue_id).order_by("-created_at").first()
 
             actor = User.objects.get(pk=actor_id)
 
@@ -665,10 +704,40 @@ def notifications(
                 new_mentions=new_mentions,
                 removed_mention=removed_mention,
             )
+            _apply_effect_keys(bulk_notifications, bulk_email_logs, idempotency_key)
             # Bulk create notifications
-            Notification.objects.bulk_create(bulk_notifications, batch_size=100)
+            Notification.objects.bulk_create(bulk_notifications, batch_size=100, ignore_conflicts=True)
             EmailNotificationLog.objects.bulk_create(bulk_email_logs, batch_size=100, ignore_conflicts=True)
         return
-    except Exception as e:
-        print(e)
-        return
+    except Exception:
+        # The durable publication adapter must observe the failure. The
+        # legacy Celery wrapper below may still be used by existing callers,
+        # but it must not turn an exception into a successful task return.
+        raise
+
+
+@shared_task
+def notifications(
+    type,
+    issue_id,
+    project_id,
+    actor_id,
+    subscriber,
+    issue_activities_created,
+    requested_data,
+    current_instance,
+    idempotency_key=None,
+    activity_id=None,
+):
+    return run_notifications(
+        type=type,
+        issue_id=issue_id,
+        project_id=project_id,
+        actor_id=actor_id,
+        subscriber=subscriber,
+        issue_activities_created=issue_activities_created,
+        requested_data=requested_data,
+        current_instance=current_instance,
+        idempotency_key=idempotency_key,
+        activity_id=activity_id,
+    )

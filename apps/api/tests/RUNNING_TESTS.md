@@ -59,6 +59,16 @@ docker compose -f docker-compose-test.yml down -v
 
 `-v` removes the ephemeral volumes and the `test_env` network. Because the data directories are tmpfs, no host state survives a teardown — every run starts clean. Run this between unrelated test sessions to free Docker resources.
 
+### Clean migration verifier
+
+For release or integration evidence, run the migration verifier from the repository root:
+
+```bash
+pnpm verify:api-migrations
+```
+
+The verifier selects `apps/api/.env.example` without creating an ignored `.env`, uses a unique Compose project, refuses to build or install dependencies, proves the database is empty before bootstrap, checks the comment-reaction partial unique index before Agent migrations, applies the full chain, checks migration drift, and reverses/reapplies the Agent boundary. It removes its containers, network, and tmpfs database on exit, including failure paths. Set `PLANE_API_TEST_IMAGE` only when an equivalent prebuilt API test image has a different local tag.
+
 ## How it works
 
 | Service      | Image                                | Purpose                                       |
@@ -75,7 +85,7 @@ Test-time env overrides live in the compose file itself (`POSTGRES_HOST=test-db`
 
 ## Troubleshooting
 
-- **`./apps/api/.env: no such file or directory`** — run `./setup.sh` from the repo root.
+- **`./apps/api/.env: no such file or directory`** — run `./setup.sh` from the repo root for the normal test suite, or use `pnpm verify:api-migrations` for the clean migration proof (it uses `.env.example`).
 - **Port already in use** — none of the test services publish host ports; if you see this it's coming from a different compose stack. Stop the local stack (`docker compose -f docker-compose-local.yml down`).
 - **Stale image after dependency changes** — rebuild explicitly: `docker compose -f docker-compose-test.yml build --no-cache api-tests`.
 - **MinIO bucket missing** — the `test-minio` entrypoint creates the bucket named by `AWS_S3_BUCKET_NAME` (default `uploads`). Change the value in `apps/api/.env` and re-run.

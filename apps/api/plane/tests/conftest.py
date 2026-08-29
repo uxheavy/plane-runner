@@ -3,10 +3,21 @@
 # See the LICENSE file for details.
 
 import pytest
+from django.core.management import call_command
+from django.db import connection, connections
+from django.test.testcases import TransactionTestCase
 from rest_framework.test import APIClient
 from pytest_django.fixtures import django_db_setup
 
-from plane.db.models import User, Workspace, WorkspaceMember
+from plane.db.models import (
+    Issue,
+    Project,
+    ProjectMember,
+    State,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 from plane.db.models.api import APIToken
 
 
@@ -14,6 +25,65 @@ from plane.db.models.api import APIToken
 def django_db_setup(django_db_setup):  # noqa: F811
     """Set up the Django database for the test session"""
     pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def bootstrap_operation_gateway_audit_for_test_database(django_db_setup, django_db_blocker):
+    """Apply the audit boundary to pytest's cloned database, not only its template."""
+
+    with django_db_blocker.unblock():
+        call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clear_migration_metadata_before_django_flush(django_db_setup):
+    """Clear the reverse-migration metadata table before Django flushes fixtures.
+
+    Migration 0135 keeps this unmanaged table at the head so a reverse can
+    restore legacy input sequences. Django's flush planner cannot see it, so
+    PostgreSQL rejects the parent-table TRUNCATE while the metadata rows still
+    reference ``agent_run_input_events``. This is test isolation only; the
+    migration-owned immutability and audit triggers remain intact during tests.
+    """
+
+    original_fixture_teardown = TransactionTestCase._fixture_teardown
+
+    def fixture_teardown(test_case):
+        if "agent_run_input_sequence_legacy_metadata" not in connection.introspection.table_names():
+            return original_fixture_teardown(test_case)
+        with connection.cursor() as cursor:
+            # The migrated test schema intentionally keeps append-only
+            # truncate guards. Disable triggers only for fixture cleanup after
+            # assertions have completed; production and test-body assertions
+            # still exercise the guards unchanged.
+            cursor.execute("SET session_replication_role = replica")
+        try:
+            for db_name in test_case._databases_names(include_mirrors=False):
+                inhibit_post_migrate = (
+                    test_case.available_apps is not None
+                    or (
+                        test_case.serialized_rollback
+                        and hasattr(connections[db_name], "_test_serialized_contents")
+                    )
+                )
+                call_command(
+                    "flush",
+                    verbosity=0,
+                    interactive=False,
+                    database=db_name,
+                    reset_sequences=False,
+                    allow_cascade=True,
+                    inhibit_post_migrate=inhibit_post_migrate,
+                )
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute("SET session_replication_role = origin")
+
+    TransactionTestCase._fixture_teardown = fixture_teardown
+    try:
+        yield
+    finally:
+        TransactionTestCase._fixture_teardown = original_fixture_teardown
 
 
 @pytest.fixture
@@ -38,6 +108,7 @@ def create_user(db, user_data):
     """Create and return a user instance"""
     user = User.objects.create(
         email=user_data["email"],
+        username=user_data["email"],
         first_name=user_data["first_name"],
         last_name=user_data["last_name"],
     )
@@ -138,3 +209,36 @@ def workspace(create_user):
     WorkspaceMember.objects.create(workspace=created_workspace, member=create_user, role=20)
 
     return created_workspace
+
+
+@pytest.fixture
+def gateway_project(db, workspace, create_user):
+    """Create the shared project fixture used by the agent gateway contracts."""
+    project = Project.objects.create(
+        name="Gateway Project",
+        identifier="AGW",
+        workspace=workspace,
+        created_by=create_user,
+    )
+    ProjectMember.objects.create(project=project, member=create_user, role=20, is_active=True)
+    State.objects.create(
+        name="Backlog",
+        color="#000000",
+        group="backlog",
+        default=True,
+        project=project,
+        workspace=workspace,
+        created_by=create_user,
+    )
+    return project
+
+
+@pytest.fixture
+def gateway_issue(db, gateway_project, workspace, create_user):
+    """Create the shared issue fixture used by the agent gateway contracts."""
+    return Issue.objects.create(
+        name="Gateway Issue",
+        project=gateway_project,
+        workspace=workspace,
+        created_by=create_user,
+    )

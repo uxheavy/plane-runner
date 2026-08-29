@@ -5,6 +5,7 @@
  */
 
 import { getElementsAtPoint, isElementGrabbable } from "react-grab/primitives";
+import type { SelectionAcquisitionAdapter } from "./contracts";
 
 export const PLANE_CONTEXT_IGNORE_ATTRIBUTE = "data-plane-context-ignore";
 
@@ -13,10 +14,7 @@ export type ViewportPoint = {
   clientY: number;
 };
 
-export interface ReactGrabSelectionAdapter {
-  getElementsAtPoint(point: ViewportPoint): readonly Element[];
-  isElementEligible(element: Element): boolean;
-}
+export type ReactGrabSelectionAdapter = SelectionAcquisitionAdapter;
 
 const getComposedParent = (element: Element): Element | null => {
   if (element.parentElement) {
@@ -50,7 +48,7 @@ const isInsidePlaneIgnoredSurface = (element: Element): boolean => {
  * Upstream contract:
  * https://www.npmjs.com/package/react-grab?activeTab=readme#customize-hit-testing
  */
-export const createReactGrabSelectionAdapter = (): ReactGrabSelectionAdapter => ({
+export const createReactGrabSelectionAdapter = (): SelectionAcquisitionAdapter => ({
   getElementsAtPoint: ({ clientX, clientY }) => {
     if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
       return [];

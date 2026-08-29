@@ -1,0 +1,8 @@
+[submodule "external/plane-mcp-server"]
+	path = external/plane-mcp-server
+	url = https://github.com/uxheavy/plane-mcp-server.git
+	branch = codex/agent-tooling-v1
+[submodule "external/plane-python-sdk"]
+	path = external/plane-python-sdk
+	url = https://github.com/uxheavy/plane-python-sdk.git
+	branch = codex/agent-tooling-v1

@@ -1,0 +1,5069 @@
+{
+  "schema_version": "plane.mcp-compatibility/v1",
+  "source": {
+    "repository": "https://github.com/makeplane/plane-mcp-server",
+    "commit": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
+    "version": "0.2.11",
+    "inventory_digest": "2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1"
+  },
+  "tool_count": 177,
+  "gateway_overrides": {
+    "get_me": {"operation_id": "user.me", "result_key": "user"},
+    "list_work_items": {"operation_id": "work_item.list", "result_key": "work_items"},
+    "create_work_item": {"operation_id": "work_item.create", "result_key": "work_item"},
+    "retrieve_work_item": {"operation_id": "work_item.retrieve", "result_key": "work_item", "input_aliases": {"work_item_id": "issue_id"}},
+    "update_work_item": {"operation_id": "work_item.update", "result_key": "work_item", "input_aliases": {"work_item_id": "issue_id"}},
+    "delete_work_item": {"operation_id": "work_item.delete", "result_key": "deleted", "result_mode": "none", "input_aliases": {"work_item_id": "issue_id"}},
+    "search_work_items": {"operation_id": "work_item.search", "result_key": "issues"},
+    "list_work_item_activities": {"operation_id": "work_item_activity.list", "result_key": "activities", "input_aliases": {"work_item_id": "issue_id"}},
+    "retrieve_work_item_activity": {"operation_id": "work_item_activity.retrieve", "result_key": "activity", "input_aliases": {"work_item_id": "issue_id"}},
+    "list_work_item_relations": {"operation_id": "work_item_relation.list", "result_key": "relations", "input_aliases": {"work_item_id": "issue_id"}},
+    "create_work_item_relation": {"operation_id": "work_item_relation.create", "result_key": "relations", "input_aliases": {"work_item_id": "issue_id"}},
+    "delete_cycle": {"operation_id": "cycle.delete", "result_key": "deleted", "result_mode": "none"},
+    "list_cycle_work_items": {"operation_id": "cycle.work_item.list", "result_key": "work_items"},
+    "transfer_cycle_work_items": {"operation_id": "cycle.transfer", "result_key": "message", "result_mode": "none"},
+    "delete_module": {"operation_id": "module.delete", "result_key": "deleted", "result_mode": "none"},
+    "list_module_work_items": {"operation_id": "module.work_item.list", "result_key": "work_items"},
+    "delete_intake_work_item": {"operation_id": "intake.delete", "result_key": "deleted", "result_mode": "none", "input_aliases": {"work_item_id": "issue_id"}},
+    "delete_label": {"operation_id": "label.delete", "result_key": "deleted", "result_mode": "none"},
+    "delete_project": {"operation_id": "project.delete", "result_key": "deleted", "result_mode": "none"},
+    "delete_state": {"operation_id": "state.delete", "result_key": "deleted", "result_mode": "none"},
+    "delete_work_item_comment": {"operation_id": "comment.delete", "result_key": "deleted", "result_mode": "none", "input_aliases": {"work_item_id": "issue_id"}},
+    "delete_work_item_link": {"operation_id": "link.delete", "result_key": "deleted", "result_mode": "none", "input_aliases": {"work_item_id": "issue_id"}},
+    "list_work_item_attachments": {"operation_id": "work_item_attachment.list", "result_key": "attachments"},
+    "get_work_item_attachment_download_url": {"operation_id": "work_item_attachment.download_url", "result_key": "attachment", "input_aliases": {"work_item_id": "issue_id"}},
+    "upload_work_item_attachment_from_url": {"operation_id": "work_item_attachment.upload_from_url", "result_key": "attachment", "input_aliases": {"work_item_id": "issue_id"}},
+    "delete_work_item_attachment": {"operation_id": "work_item_attachment.delete", "result_key": "deleted", "result_mode": "none", "input_aliases": {"work_item_id": "issue_id"}},
+    "read_work_item_attachment": {"operation_id": "work_item_attachment.read", "result_key": "attachment_read", "result_mode": "content", "input_aliases": {"work_item_id": "issue_id"}},
+    "list_cycles": {"operation_id": "cycle.list", "result_key": "cycles"},
+    "create_cycle": {"operation_id": "cycle.create", "result_key": "cycle"},
+    "retrieve_cycle": {"operation_id": "cycle.retrieve", "result_key": "cycle"},
+    "update_cycle": {"operation_id": "cycle.update", "result_key": "cycle"},
+    "list_modules": {"operation_id": "module.list", "result_key": "modules"},
+    "create_module": {"operation_id": "module.create", "result_key": "module"},
+    "retrieve_module": {"operation_id": "module.retrieve", "result_key": "module"},
+    "update_module": {"operation_id": "module.update", "result_key": "module"},
+    "list_projects": {"operation_id": "project.list", "result_key": "projects"},
+    "create_project": {"operation_id": "project.create", "result_key": "project"},
+    "retrieve_project": {"operation_id": "project.retrieve", "result_key": "project"},
+    "update_project": {"operation_id": "project.update", "result_key": "project"},
+    "list_states": {"operation_id": "state.list", "result_key": "states"},
+    "create_state": {"operation_id": "state.create", "result_key": "state"},
+    "retrieve_state": {"operation_id": "state.retrieve", "result_key": "state"},
+    "update_state": {"operation_id": "state.update", "result_key": "state"},
+    "list_labels": {"operation_id": "label.list", "result_key": "labels"},
+    "create_label": {"operation_id": "label.create", "result_key": "label"},
+    "retrieve_label": {"operation_id": "label.retrieve", "result_key": "label"},
+    "update_label": {"operation_id": "label.update", "result_key": "label"},
+    "list_work_item_links": {"operation_id": "link.list", "result_key": "links", "input_aliases": {"work_item_id": "issue_id"}},
+    "create_work_item_link": {"operation_id": "link.create", "result_key": "link", "input_aliases": {"work_item_id": "issue_id"}},
+    "retrieve_work_item_link": {"operation_id": "link.retrieve", "result_key": "link", "input_aliases": {"work_item_id": "issue_id"}},
+    "update_work_item_link": {"operation_id": "link.update", "result_key": "link", "input_aliases": {"work_item_id": "issue_id"}},
+    "list_work_item_comments": {"operation_id": "comment.list", "result_key": "comments", "input_aliases": {"work_item_id": "issue_id"}},
+    "create_work_item_comment": {"operation_id": "comment.create", "result_key": "comment", "input_aliases": {"work_item_id": "issue_id"}},
+    "retrieve_work_item_comment": {"operation_id": "comment.retrieve", "result_key": "comment", "input_aliases": {"work_item_id": "issue_id"}},
+    "update_work_item_comment": {"operation_id": "comment.update", "result_key": "comment", "input_aliases": {"work_item_id": "issue_id"}},
+    "list_intake_work_items": {"operation_id": "intake.list", "result_key": "intake_work_items"},
+    "create_intake_work_item": {"operation_id": "intake.create", "result_key": "intake_work_item"},
+    "retrieve_intake_work_item": {"operation_id": "intake.retrieve", "result_key": "intake_work_item", "input_aliases": {"work_item_id": "issue_id"}},
+    "update_intake_work_item": {"operation_id": "intake.update", "result_key": "intake_work_item", "input_aliases": {"work_item_id": "issue_id"}},
+    "list_pages": {"operation_id": "page.list", "result_key": "pages"},
+    "retrieve_page": {"operation_id": "page.retrieve", "result_key": "page"},
+    "create_page": {"operation_id": "page.create", "result_key": "page"},
+    "get_project_members": {"operation_id": "project_member.list", "result_key": "members"},
+    "get_workspace_members": {"operation_id": "workspace_member.list", "result_key": "members"},
+    "manage_cycle_work_items": {"operation_id": "cycle.work_item.manage", "result_key": "cycle_work_items", "result_mode": "none"},
+    "manage_cycle_archive": {"operation_id": "cycle.archive", "result_key": "archived"},
+    "complete_cycle": {"operation_id": "cycle.complete", "result_key": "cycle"},
+    "manage_module_work_items": {"operation_id": "module.work_item.manage", "result_key": "module_work_items", "result_mode": "none"},
+    "manage_module_archive": {"operation_id": "module.archive", "result_key": "module", "result_mode": "none"},
+    "manage_project_archive": {"operation_id": "project.archive", "result_key": "project", "result_mode": "none"},
+    "update_project_features": {"operation_id": "project.features.update", "result_key": "project"},
+    "get_project_estimate": {"operation_id": "project.estimate.retrieve", "result_key": "estimate"},
+    "list_project_estimate_points": {"operation_id": "project.estimate.points.list", "result_key": "points"},
+    "create_project_estimate": {"operation_id": "project.estimate.create", "result_key": "estimate"},
+    "update_project_estimate": {"operation_id": "project.estimate.update", "result_key": "estimate"},
+    "delete_project_estimate": {"operation_id": "project.estimate.delete", "result_key": "deleted", "result_mode": "none"},
+    "link_estimate_to_project": {"operation_id": "project.estimate.link", "result_key": "project"},
+    "create_project_estimate_points": {"operation_id": "project.estimate.points.create", "result_key": "points"},
+    "update_project_estimate_point": {"operation_id": "project.estimate.point.update", "result_key": "point"},
+    "delete_project_estimate_point": {"operation_id": "project.estimate.point.delete", "result_key": "deleted", "result_mode": "none"},
+    "retrieve_work_item_by_identifier": {"operation_id": "work_item.identifier.retrieve", "result_key": "work_item"},
+    "manage_work_item_assignee": {"operation_id": "work_item.assignee.manage", "result_key": "work_item"},
+    "manage_work_item_label": {"operation_id": "work_item.label.manage", "result_key": "work_item"},
+    "list_archived_work_items": {"operation_id": "work_item.archive.list", "result_key": "work_items"},
+    "manage_work_item_archive": {"operation_id": "work_item.archive", "result_key": "work_item", "result_mode": "none"},
+    "remove_work_item_relation": {"operation_id": "work_item_relation.remove", "result_key": "removed", "result_mode": "none"}
+  },
+  "actions": [
+    {
+      "name": "list_customers",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "source_line": 20,
+      "signature": "query: str | None=None, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedCustomerResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.base:list_customers"
+      ]
+    },
+    {
+      "name": "create_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "source_line": 41,
+      "signature": "name: str, description_html: str | None=None, email: str | None=None, website_url: str | None=None, domain: str | None=None, employees: int | None=None, stage: str | None=None, contract_status: str | None=None, revenue: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Customer",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.base:create_customer"
+      ]
+    },
+    {
+      "name": "retrieve_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "source_line": 100,
+      "signature": "customer_id: str",
+      "return_annotation": "Customer",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.base:retrieve_customer"
+      ]
+    },
+    {
+      "name": "update_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "source_line": 114,
+      "signature": "customer_id: str, name: str | None=None, description_html: str | None=None, email: str | None=None, website_url: str | None=None, domain: str | None=None, employees: int | None=None, stage: str | None=None, contract_status: str | None=None, revenue: str | None=None, logo_props: dict | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Customer",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.base:update_customer"
+      ]
+    },
+    {
+      "name": "delete_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "source_line": 172,
+      "signature": "customer_id: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.base:delete_customer"
+      ]
+    },
+    {
+      "name": "list_customer_properties",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "source_line": 20,
+      "signature": "cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedCustomerPropertyResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.properties:list_customer_properties"
+      ]
+    },
+    {
+      "name": "create_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "source_line": 43,
+      "signature": "name: str, display_name: str, property_type: str, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, settings: dict | None=None, is_active: bool | None=None, is_multi: bool | None=None, options: list[dict] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "CustomerProperty",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.properties:create_customer_property"
+      ]
+    },
+    {
+      "name": "retrieve_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "source_line": 105,
+      "signature": "property_id: str",
+      "return_annotation": "CustomerProperty",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.properties:retrieve_customer_property"
+      ]
+    },
+    {
+      "name": "update_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "source_line": 119,
+      "signature": "property_id: str, display_name: str | None=None, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, is_active: bool | None=None, options: list[dict] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "CustomerProperty",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.properties:update_customer_property"
+      ]
+    },
+    {
+      "name": "delete_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "source_line": 169,
+      "signature": "property_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.properties:delete_customer_property"
+      ]
+    },
+    {
+      "name": "get_customer_property_values",
+      "category": "customers.property_values",
+      "source_file": "plane_mcp/tools/customers/property_values.py",
+      "source_line": 13,
+      "signature": "customer_id: str, property_id: str | None=None",
+      "return_annotation": "dict[str, list[str]]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.property_values:get_customer_property_values"
+      ]
+    },
+    {
+      "name": "set_customer_property_values",
+      "category": "customers.property_values",
+      "source_file": "plane_mcp/tools/customers/property_values.py",
+      "source_line": 35,
+      "signature": "customer_id: str, values: dict[str, list[str]]",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.property_values:set_customer_property_values"
+      ]
+    },
+    {
+      "name": "list_customer_requests",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "source_line": 19,
+      "signature": "customer_id: str, query: str | None=None, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedCustomerRequestResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.requests:list_customer_requests"
+      ]
+    },
+    {
+      "name": "create_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "source_line": 49,
+      "signature": "customer_id: str, name: str, description_html: str | None=None, link: str | None=None, work_item_ids: list[str] | None=None",
+      "return_annotation": "CustomerRequest",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.requests:create_customer_request"
+      ]
+    },
+    {
+      "name": "retrieve_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "source_line": 82,
+      "signature": "customer_id: str, request_id: str",
+      "return_annotation": "CustomerRequest",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.requests:retrieve_customer_request"
+      ]
+    },
+    {
+      "name": "update_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "source_line": 99,
+      "signature": "customer_id: str, request_id: str, name: str | None=None, description_html: str | None=None, link: str | None=None",
+      "return_annotation": "CustomerRequest",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.requests:update_customer_request"
+      ]
+    },
+    {
+      "name": "delete_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "source_line": 132,
+      "signature": "customer_id: str, request_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.requests:delete_customer_request"
+      ]
+    },
+    {
+      "name": "list_customer_work_items",
+      "category": "customers.work_items",
+      "source_file": "plane_mcp/tools/customers/work_items.py",
+      "source_line": 16,
+      "signature": "customer_id: str, customer_request_id: str | None=None, search: str | None=None",
+      "return_annotation": "list[CustomerWorkItem]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.work_items:list_customer_work_items"
+      ]
+    },
+    {
+      "name": "manage_customer_work_items",
+      "category": "customers.work_items",
+      "source_file": "plane_mcp/tools/customers/work_items.py",
+      "source_line": 41,
+      "signature": "customer_id: str, action: Literal['link', 'unlink'], work_item_ids: list[str], customer_request_id: str | None=None",
+      "return_annotation": "list[CustomerWorkItem]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.customers.work_items:manage_customer_work_items"
+      ]
+    },
+    {
+      "name": "list_cycles",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 32,
+      "signature": "project_id: str, archived: bool=False, status: CycleStatusEnum | None=None, cursor: str | None=None, per_page: int | None=None, order_by: str | None=None",
+      "return_annotation": "PaginatedCycleLiteResponse | PaginatedArchivedCycleResponse",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:list_cycles"
+      ]
+    },
+    {
+      "name": "create_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 70,
+      "signature": "project_id: str, name: str, owned_by: str, description: str | None=None, start_date: str | None=None, end_date: str | None=None, external_source: str | None=None, external_id: str | None=None, timezone: str | None=None",
+      "return_annotation": "Cycle",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:create_cycle"
+      ]
+    },
+    {
+      "name": "retrieve_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 116,
+      "signature": "project_id: str, cycle_id: str",
+      "return_annotation": "Cycle",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:retrieve_cycle"
+      ]
+    },
+    {
+      "name": "update_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 132,
+      "signature": "project_id: str, cycle_id: str, name: str | None=None, description: str | None=None, start_date: str | None=None, end_date: str | None=None, owned_by: str | None=None, external_source: str | None=None, external_id: str | None=None, timezone: str | None=None",
+      "return_annotation": "Cycle",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:update_cycle"
+      ]
+    },
+    {
+      "name": "delete_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 179,
+      "signature": "project_id: str, cycle_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:delete_cycle"
+      ]
+    },
+    {
+      "name": "manage_cycle_work_items",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 192,
+      "signature": "project_id: str, cycle_id: str, add_ids: list[str] | None=None, remove_ids: list[str] | None=None",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:manage_cycle_work_items"
+      ]
+    },
+    {
+      "name": "list_cycle_work_items",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 229,
+      "signature": "project_id: str, cycle_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:list_cycle_work_items"
+      ]
+    },
+    {
+      "name": "transfer_cycle_work_items",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 295,
+      "signature": "project_id: str, cycle_id: str, new_cycle_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:transfer_cycle_work_items"
+      ]
+    },
+    {
+      "name": "manage_cycle_archive",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 321,
+      "signature": "project_id: str, cycle_id: str, archive: bool",
+      "return_annotation": "bool",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:manage_cycle_archive"
+      ]
+    },
+    {
+      "name": "complete_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "source_line": 356,
+      "signature": "project_id: str, cycle_id: str",
+      "return_annotation": "Cycle",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.cycles:complete_cycle"
+      ]
+    },
+    {
+      "name": "list_initiatives",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 39,
+      "signature": "params: dict[str, Any] | None=None",
+      "return_annotation": "list[Initiative]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:list_initiatives"
+      ]
+    },
+    {
+      "name": "create_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 68,
+      "signature": "name: str, description_html: str | None=None, start_date: str | None=None, end_date: str | None=None, logo_props: dict | None=None, state: InitiativeState | str | None=None, lead: str | None=None",
+      "return_annotation": "Initiative",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:create_initiative"
+      ]
+    },
+    {
+      "name": "retrieve_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 122,
+      "signature": "initiative_id: str",
+      "return_annotation": "Initiative",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:retrieve_initiative"
+      ]
+    },
+    {
+      "name": "update_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 146,
+      "signature": "initiative_id: str, name: str | None=None, description_html: str | None=None, start_date: str | None=None, end_date: str | None=None, logo_props: dict | None=None, state: InitiativeState | str | None=None, lead: str | None=None",
+      "return_annotation": "Initiative",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:update_initiative"
+      ]
+    },
+    {
+      "name": "delete_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 197,
+      "signature": "initiative_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:delete_initiative"
+      ]
+    },
+    {
+      "name": "list_initiative_projects",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 218,
+      "signature": "initiative_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Project]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:list_initiative_projects"
+      ]
+    },
+    {
+      "name": "manage_initiative_projects",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "source_line": 240,
+      "signature": "initiative_id: str, action: Literal['add', 'remove'], project_ids: list[str]",
+      "return_annotation": "list[Project]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.initiatives:manage_initiative_projects"
+      ]
+    },
+    {
+      "name": "list_intake_work_items",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "source_line": 21,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[IntakeWorkItem]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.intake:list_intake_work_items"
+      ]
+    },
+    {
+      "name": "create_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "source_line": 48,
+      "signature": "project_id: str, data: dict[str, Any]",
+      "return_annotation": "IntakeWorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.intake:create_intake_work_item"
+      ]
+    },
+    {
+      "name": "retrieve_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "source_line": 70,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "IntakeWorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.intake:retrieve_intake_work_item"
+      ]
+    },
+    {
+      "name": "update_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "source_line": 102,
+      "signature": "project_id: str, work_item_id: str, status: int | None=None, snoozed_till: str | None=None, duplicate_to: str | None=None, source: str | None=None, source_email: str | None=None",
+      "return_annotation": "IntakeWorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.intake:update_intake_work_item"
+      ]
+    },
+    {
+      "name": "delete_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "source_line": 162,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.intake:delete_intake_work_item"
+      ]
+    },
+    {
+      "name": "list_labels",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "source_line": 20,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Label]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.labels:list_labels"
+      ]
+    },
+    {
+      "name": "create_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "source_line": 41,
+      "signature": "project_id: str, name: str, color: str | None=None, description: str | None=None, parent: str | None=None, sort_order: float | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Label",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.labels:create_label"
+      ]
+    },
+    {
+      "name": "retrieve_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "source_line": 82,
+      "signature": "project_id: str, label_id: str",
+      "return_annotation": "Label",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.labels:retrieve_label"
+      ]
+    },
+    {
+      "name": "update_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "source_line": 97,
+      "signature": "project_id: str, label_id: str, name: str | None=None, color: str | None=None, description: str | None=None, parent: str | None=None, sort_order: float | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Label",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.labels:update_label"
+      ]
+    },
+    {
+      "name": "delete_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "source_line": 145,
+      "signature": "project_id: str, label_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.labels:delete_label"
+      ]
+    },
+    {
+      "name": "list_milestones",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 22,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Milestone]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:list_milestones"
+      ]
+    },
+    {
+      "name": "create_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 43,
+      "signature": "project_id: str, title: str, target_date: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Milestone",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:create_milestone"
+      ]
+    },
+    {
+      "name": "retrieve_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 75,
+      "signature": "project_id: str, milestone_id: str",
+      "return_annotation": "Milestone",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:retrieve_milestone"
+      ]
+    },
+    {
+      "name": "update_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 92,
+      "signature": "project_id: str, milestone_id: str, title: str | None=None, target_date: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Milestone",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:update_milestone"
+      ]
+    },
+    {
+      "name": "delete_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 131,
+      "signature": "project_id: str, milestone_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:delete_milestone"
+      ]
+    },
+    {
+      "name": "manage_milestone_work_items",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 143,
+      "signature": "project_id: str, milestone_id: str, add_ids: list[str] | None=None, remove_ids: list[str] | None=None",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:manage_milestone_work_items"
+      ]
+    },
+    {
+      "name": "list_milestone_work_items",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "source_line": 179,
+      "signature": "project_id: str, milestone_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[MilestoneWorkItem]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.milestones:list_milestone_work_items"
+      ]
+    },
+    {
+      "name": "list_modules",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 30,
+      "signature": "project_id: str, archived: bool=False, cursor: str | None=None, per_page: int | None=None, order_by: str | None=None",
+      "return_annotation": "PaginatedModuleLiteResponse | PaginatedArchivedModuleResponse",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:list_modules"
+      ]
+    },
+    {
+      "name": "create_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 65,
+      "signature": "project_id: str, name: str, description: str | None=None, start_date: str | None=None, target_date: str | None=None, status: str | None=None, lead: str | None=None, members: list[str] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Module",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:create_module"
+      ]
+    },
+    {
+      "name": "retrieve_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 118,
+      "signature": "project_id: str, module_id: str",
+      "return_annotation": "Module",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:retrieve_module"
+      ]
+    },
+    {
+      "name": "update_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 134,
+      "signature": "project_id: str, module_id: str, name: str | None=None, description: str | None=None, start_date: str | None=None, target_date: str | None=None, status: str | None=None, lead: str | None=None, members: list[str] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Module",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:update_module"
+      ]
+    },
+    {
+      "name": "delete_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 191,
+      "signature": "project_id: str, module_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:delete_module"
+      ]
+    },
+    {
+      "name": "manage_module_work_items",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 204,
+      "signature": "project_id: str, module_id: str, add_ids: list[str] | None=None, remove_ids: list[str] | None=None",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:manage_module_work_items"
+      ]
+    },
+    {
+      "name": "list_module_work_items",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 241,
+      "signature": "project_id: str, module_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:list_module_work_items"
+      ]
+    },
+    {
+      "name": "manage_module_archive",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "source_line": 307,
+      "signature": "project_id: str, module_id: str, archive: bool",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.modules:manage_module_archive"
+      ]
+    },
+    {
+      "name": "list_pages",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "source_line": 16,
+      "signature": "project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Page]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.pages:list_pages"
+      ]
+    },
+    {
+      "name": "attach_page_to_work_item",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "source_line": 42,
+      "signature": "project_id: str, work_item_id: str, page_id: str",
+      "return_annotation": "WorkItemPage",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.pages:attach_page_to_work_item"
+      ]
+    },
+    {
+      "name": "list_work_item_pages",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "source_line": 67,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "list[WorkItemPage]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.pages:list_work_item_pages"
+      ]
+    },
+    {
+      "name": "detach_page_from_work_item",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "source_line": 90,
+      "signature": "project_id: str, work_item_id: str, work_item_page_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.pages:detach_page_from_work_item"
+      ]
+    },
+    {
+      "name": "retrieve_page",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "source_line": 112,
+      "signature": "page_id: str, project_id: str | None=None",
+      "return_annotation": "Page",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.pages:retrieve_page"
+      ]
+    },
+    {
+      "name": "create_page",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "source_line": 142,
+      "signature": "name: str, description_html: str, project_id: str | None=None, access: int | None=None, color: str | None=None, is_locked: bool | None=None, archived_at: str | None=None, view_props: dict[str, Any] | None=None, logo_props: dict[str, Any] | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "Page",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.pages:create_page"
+      ]
+    },
+    {
+      "name": "get_pql_reference",
+      "category": "pql",
+      "source_file": "plane_mcp/tools/pql.py",
+      "source_line": 14,
+      "signature": "detail: Literal['brief', 'full']='full'",
+      "return_annotation": "dict",
+      "disposition": "MCP-D-002",
+      "adapter": "local_pql",
+      "gateway_status": "local_only",
+      "gateway_operation_id": null,
+      "mapping_kind": "local_static_reference",
+      "behavior": "local_only",
+      "mutation": false,
+      "capabilities": [],
+      "preserves": [
+        "response_semantics",
+        "error_semantics"
+      ],
+      "rationale_code": "LOCAL_STATIC_REFERENCE",
+      "rationale": "Static PQL reference content has no Plane mutation or SDK/network dependency; retain its local response and test the pinned brief/full content.",
+      "sdk_entrypoints": [],
+      "blocker": null
+    },
+    {
+      "name": "list_projects",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 34,
+      "signature": "cursor: str | None=None, per_page: int | None=None, order_by: str | None=None",
+      "return_annotation": "PaginatedProjectLiteResponse",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:list_projects"
+      ]
+    },
+    {
+      "name": "create_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 63,
+      "signature": "name: str, identifier: str, description: str | None=None, project_lead: str | None=None, default_assignee: str | None=None, emoji: str | None=None, cover_image: str | None=None, module_view: bool | None=None, cycle_view: bool | None=None, issue_views_view: bool | None=None, page_view: bool | None=None, intake_view: bool | None=None, guest_view_all_features: bool | None=None, archive_in: int | None=None, close_in: int | None=None, timezone: str | None=None, external_source: str | None=None, external_id: str | None=None, is_issue_type_enabled: bool | None=None",
+      "return_annotation": "Project",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:create_project"
+      ]
+    },
+    {
+      "name": "retrieve_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 144,
+      "signature": "project_id: str",
+      "return_annotation": "Project",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:retrieve_project"
+      ]
+    },
+    {
+      "name": "update_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 159,
+      "signature": "project_id: str, name: str | None=None, description: str | None=None, project_lead: str | None=None, default_assignee: str | None=None, identifier: str | None=None, emoji: str | None=None, cover_image: str | None=None, network: int | None=None, module_view: bool | None=None, cycle_view: bool | None=None, issue_views_view: bool | None=None, page_view: bool | None=None, intake_view: bool | None=None, guest_view_all_features: bool | None=None, archive_in: int | None=None, close_in: int | None=None, timezone: str | None=None, external_source: str | None=None, external_id: str | None=None, is_issue_type_enabled: bool | None=None, is_time_tracking_enabled: bool | None=None, default_state: str | None=None, estimate: str | None=None",
+      "return_annotation": "Project",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:update_project"
+      ]
+    },
+    {
+      "name": "delete_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 257,
+      "signature": "project_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:delete_project"
+      ]
+    },
+    {
+      "name": "manage_project_archive",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 269,
+      "signature": "project_id: str, archive: bool",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:manage_project_archive"
+      ]
+    },
+    {
+      "name": "get_project_worklog_summary",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 287,
+      "signature": "project_id: str",
+      "return_annotation": "list[ProjectWorklogSummary]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:get_project_worklog_summary"
+      ]
+    },
+    {
+      "name": "get_project_members",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 302,
+      "signature": "project_id: str, first_name: str | None=None, last_name: str | None=None, email: str | None=None, display_name: str | None=None, role_slug: str | None=None, is_active: bool | None=None, is_bot: bool | None=None, cursor: str | None=None, per_page: int | None=100, order_by: str | None=None",
+      "return_annotation": "PaginatedProjectMemberResponse",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:get_project_members"
+      ]
+    },
+    {
+      "name": "update_project_features",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 349,
+      "signature": "project_id: str, modules: bool | None=None, cycles: bool | None=None, views: bool | None=None, pages: bool | None=None, intakes: bool | None=None, work_item_types: bool | None=None",
+      "return_annotation": "ProjectFeature",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:update_project_features"
+      ]
+    },
+    {
+      "name": "get_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 388,
+      "signature": "project_id: str",
+      "return_annotation": "Estimate",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:get_project_estimate"
+      ]
+    },
+    {
+      "name": "list_project_estimate_points",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 405,
+      "signature": "project_id: str, estimate_id: str",
+      "return_annotation": "list[EstimatePoint]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:list_project_estimate_points"
+      ]
+    },
+    {
+      "name": "create_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 435,
+      "signature": "project_id: str, name: str, type: str | None=None, description: str | None=None, last_used: bool=True, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "Estimate",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:create_project_estimate"
+      ]
+    },
+    {
+      "name": "update_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 471,
+      "signature": "project_id: str, name: str | None=None, description: str | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "Estimate",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:update_project_estimate"
+      ]
+    },
+    {
+      "name": "delete_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 501,
+      "signature": "project_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:delete_project_estimate"
+      ]
+    },
+    {
+      "name": "link_estimate_to_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 512,
+      "signature": "project_id: str, estimate_id: str",
+      "return_annotation": "Project",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:link_estimate_to_project"
+      ]
+    },
+    {
+      "name": "create_project_estimate_points",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 531,
+      "signature": "project_id: str, estimate_id: str, points: list[dict]",
+      "return_annotation": "list[EstimatePoint]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:create_project_estimate_points"
+      ]
+    },
+    {
+      "name": "update_project_estimate_point",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 569,
+      "signature": "project_id: str, estimate_id: str, estimate_point_id: str, value: str | None=None, key: int | None=None, description: str | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "EstimatePoint",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:update_project_estimate_point"
+      ]
+    },
+    {
+      "name": "delete_project_estimate_point",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "source_line": 612,
+      "signature": "project_id: str, estimate_id: str, estimate_point_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.projects:delete_project_estimate_point"
+      ]
+    },
+    {
+      "name": "list_releases",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "source_line": 23,
+      "signature": "cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.base:list_releases"
+      ]
+    },
+    {
+      "name": "create_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "source_line": 42,
+      "signature": "name: str, description_html: str | None=None, status: _STATUS | None=None, target_date: str | None=None, release_date: str | None=None, tag_id: str | None=None, lead_id: str | None=None, is_prerelease: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Release",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.base:create_release"
+      ]
+    },
+    {
+      "name": "retrieve_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "source_line": 90,
+      "signature": "release_id: str",
+      "return_annotation": "Release",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.base:retrieve_release"
+      ]
+    },
+    {
+      "name": "update_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "source_line": 104,
+      "signature": "release_id: str, name: str | None=None, description_html: str | None=None, status: _STATUS | None=None, target_date: str | None=None, release_date: str | None=None, tag_id: str | None=None, lead_id: str | None=None, is_prerelease: bool | None=None",
+      "return_annotation": "Release",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.base:update_release"
+      ]
+    },
+    {
+      "name": "delete_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "source_line": 148,
+      "signature": "release_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.base:delete_release"
+      ]
+    },
+    {
+      "name": "get_release_changelog",
+      "category": "releases.changelog",
+      "source_file": "plane_mcp/tools/releases/changelog.py",
+      "source_line": 16,
+      "signature": "release_id: str",
+      "return_annotation": "ReleaseChangelog",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.changelog:get_release_changelog"
+      ]
+    },
+    {
+      "name": "update_release_changelog",
+      "category": "releases.changelog",
+      "source_file": "plane_mcp/tools/releases/changelog.py",
+      "source_line": 31,
+      "signature": "release_id: str, description_html: str | None=None, description_stripped: str | None=None, description_json: Any | None=None",
+      "return_annotation": "ReleaseChangelog",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.changelog:update_release_changelog"
+      ]
+    },
+    {
+      "name": "list_release_labels",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "source_line": 28,
+      "signature": "release_id: str | None=None, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseLabelResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.labels:list_release_labels"
+      ]
+    },
+    {
+      "name": "create_release_label",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "source_line": 55,
+      "signature": "name: str, color: str | None=None, sort_order: int | None=None",
+      "return_annotation": "ReleaseLabel",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.labels:create_release_label"
+      ]
+    },
+    {
+      "name": "update_release_label",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "source_line": 78,
+      "signature": "label_id: str, name: str | None=None, color: str | None=None, sort_order: int | None=None",
+      "return_annotation": "ReleaseLabel",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.labels:update_release_label"
+      ]
+    },
+    {
+      "name": "delete_release_label",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "source_line": 101,
+      "signature": "label_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.labels:delete_release_label"
+      ]
+    },
+    {
+      "name": "manage_release_labels",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "source_line": 115,
+      "signature": "release_id: str, action: Literal['attach', 'detach'], label_ids: list[str]",
+      "return_annotation": "list[ReleaseLabel]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.labels:manage_release_labels"
+      ]
+    },
+    {
+      "name": "list_release_tags",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "source_line": 19,
+      "signature": "cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseTagResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.tags:list_release_tags"
+      ]
+    },
+    {
+      "name": "create_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "source_line": 41,
+      "signature": "version: str, description: str | None=None, commit_hash: str | None=None, git_tag: str | None=None",
+      "return_annotation": "ReleaseTag",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.tags:create_release_tag"
+      ]
+    },
+    {
+      "name": "retrieve_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "source_line": 64,
+      "signature": "tag_id: str",
+      "return_annotation": "ReleaseTag",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.tags:retrieve_release_tag"
+      ]
+    },
+    {
+      "name": "update_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "source_line": 78,
+      "signature": "tag_id: str, version: str | None=None, description: str | None=None, commit_hash: str | None=None, git_tag: str | None=None",
+      "return_annotation": "ReleaseTag",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.tags:update_release_tag"
+      ]
+    },
+    {
+      "name": "delete_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "source_line": 103,
+      "signature": "tag_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.tags:delete_release_tag"
+      ]
+    },
+    {
+      "name": "list_release_work_items",
+      "category": "releases.work_items",
+      "source_file": "plane_mcp/tools/releases/work_items.py",
+      "source_line": 22,
+      "signature": "release_id: str, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseWorkItemResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.work_items:list_release_work_items"
+      ]
+    },
+    {
+      "name": "manage_release_work_items",
+      "category": "releases.work_items",
+      "source_file": "plane_mcp/tools/releases/work_items.py",
+      "source_line": 45,
+      "signature": "release_id: str, action: Literal['add', 'remove'], work_item_ids: list[str]",
+      "return_annotation": "list[ReleaseWorkItem]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.releases.work_items:manage_release_work_items"
+      ]
+    },
+    {
+      "name": "list_roles",
+      "category": "roles",
+      "source_file": "plane_mcp/tools/roles.py",
+      "source_line": 15,
+      "signature": "namespace: Literal['workspace', 'project'] | None=None, per_page: int | None=None, cursor: str | None=None",
+      "return_annotation": "PaginatedRoleResponse",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.roles:list_roles"
+      ]
+    },
+    {
+      "name": "retrieve_role",
+      "category": "roles",
+      "source_file": "plane_mcp/tools/roles.py",
+      "source_line": 45,
+      "signature": "role_id: str",
+      "return_annotation": "Role",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.roles:retrieve_role"
+      ]
+    },
+    {
+      "name": "list_states",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "source_line": 21,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[State]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.states:list_states"
+      ]
+    },
+    {
+      "name": "create_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "source_line": 42,
+      "signature": "project_id: str, name: str, color: str, description: str | None=None, sequence: float | None=None, group: str | None=None, is_triage: bool | None=None, default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "State",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.states:create_state"
+      ]
+    },
+    {
+      "name": "retrieve_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "source_line": 94,
+      "signature": "project_id: str, state_id: str",
+      "return_annotation": "State",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.states:retrieve_state"
+      ]
+    },
+    {
+      "name": "update_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "source_line": 109,
+      "signature": "project_id: str, state_id: str, name: str | None=None, color: str | None=None, description: str | None=None, sequence: float | None=None, group: str | None=None, is_triage: bool | None=None, default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "State",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.states:update_state"
+      ]
+    },
+    {
+      "name": "delete_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "source_line": 168,
+      "signature": "project_id: str, state_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.states:delete_state"
+      ]
+    },
+    {
+      "name": "get_me",
+      "category": "users",
+      "source_file": "plane_mcp/tools/users.py",
+      "source_line": 13,
+      "signature": "",
+      "return_annotation": "UserLite",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.users:get_me"
+      ]
+    },
+    {
+      "name": "list_work_item_activities",
+      "category": "work_item_activities",
+      "source_file": "plane_mcp/tools/work_item_activities.py",
+      "source_line": 18,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemActivity]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_activities:list_work_item_activities"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_activity",
+      "category": "work_item_activities",
+      "source_file": "plane_mcp/tools/work_item_activities.py",
+      "source_line": 44,
+      "signature": "project_id: str, work_item_id: str, activity_id: str",
+      "return_annotation": "WorkItemActivity",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_activities:retrieve_work_item_activity"
+      ]
+    },
+    {
+      "name": "list_work_item_attachments",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "source_line": 88,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "list[dict[str, Any]]",
+      "disposition": "MCP-D-003",
+      "adapter": "hardened_attachment",
+      "behavior": "attachment_metadata",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_attachments:list_work_item_attachments"
+      ]
+    },
+    {
+      "name": "get_work_item_attachment_download_url",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "source_line": 117,
+      "signature": "project_id: str, work_item_id: str, attachment_id: str",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-003",
+      "adapter": "hardened_attachment",
+      "behavior": "presigned_url",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_attachments:get_work_item_attachment_download_url"
+      ]
+    },
+    {
+      "name": "upload_work_item_attachment_from_url",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "source_line": 174,
+      "signature": "project_id: str, work_item_id: str, url: str, name: str | None=None",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-003",
+      "adapter": "hardened_attachment",
+      "behavior": "external_source_fetch",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_attachments:upload_work_item_attachment_from_url"
+      ]
+    },
+    {
+      "name": "delete_work_item_attachment",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "source_line": 248,
+      "signature": "project_id: str, work_item_id: str, attachment_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-003",
+      "adapter": "hardened_attachment",
+      "behavior": "attachment_metadata",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_attachments:delete_work_item_attachment"
+      ]
+    },
+    {
+      "name": "read_work_item_attachment",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "source_line": 274,
+      "signature": "project_id: str, work_item_id: str, attachment_id: str",
+      "return_annotation": "Image | str",
+      "disposition": "MCP-D-003",
+      "adapter": "hardened_attachment",
+      "behavior": "content_read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_attachments:read_work_item_attachment"
+      ]
+    },
+    {
+      "name": "list_work_item_comments",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "source_line": 21,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemComment]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_comments:list_work_item_comments"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "source_line": 47,
+      "signature": "project_id: str, work_item_id: str, comment_id: str",
+      "return_annotation": "WorkItemComment",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_comments:retrieve_work_item_comment"
+      ]
+    },
+    {
+      "name": "create_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "source_line": 72,
+      "signature": "project_id: str, work_item_id: str, comment_html: str | None=None, comment_json: dict[str, Any] | None=None, access: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemComment",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_comments:create_work_item_comment"
+      ]
+    },
+    {
+      "name": "update_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "source_line": 119,
+      "signature": "project_id: str, work_item_id: str, comment_id: str, comment_html: str | None=None, comment_json: dict[str, Any] | None=None, access: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemComment",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_comments:update_work_item_comment"
+      ]
+    },
+    {
+      "name": "delete_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "source_line": 169,
+      "signature": "project_id: str, work_item_id: str, comment_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_comments:delete_work_item_comment"
+      ]
+    },
+    {
+      "name": "list_work_item_links",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "source_line": 20,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemLink]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_links:list_work_item_links"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "source_line": 46,
+      "signature": "project_id: str, work_item_id: str, link_id: str",
+      "return_annotation": "WorkItemLink",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_links:retrieve_work_item_link"
+      ]
+    },
+    {
+      "name": "create_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "source_line": 71,
+      "signature": "project_id: str, work_item_id: str, url: str",
+      "return_annotation": "WorkItemLink",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_links:create_work_item_link"
+      ]
+    },
+    {
+      "name": "update_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "source_line": 99,
+      "signature": "project_id: str, work_item_id: str, link_id: str, url: str | None=None",
+      "return_annotation": "WorkItemLink",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_links:update_work_item_link"
+      ]
+    },
+    {
+      "name": "delete_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "source_line": 130,
+      "signature": "project_id: str, work_item_id: str, link_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_links:delete_work_item_link"
+      ]
+    },
+    {
+      "name": "list_work_item_properties",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 30,
+      "signature": "work_item_type_id: str | None=None, project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemProperty]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:list_work_item_properties"
+      ]
+    },
+    {
+      "name": "create_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 123,
+      "signature": "display_name: str, property_type: str, project_id: str | None=None, work_item_type_id: str | None=None, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, settings: dict | None=None, is_active: bool | None=None, is_multi: bool | None=None, validation_rules: dict | None=None, external_source: str | None=None, external_id: str | None=None, options: list[dict] | None=None",
+      "return_annotation": "WorkItemProperty",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:create_work_item_property"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 221,
+      "signature": "work_item_property_id: str, project_id: str | None=None, work_item_type_id: str | None=None",
+      "return_annotation": "WorkItemProperty",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:retrieve_work_item_property"
+      ]
+    },
+    {
+      "name": "update_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 257,
+      "signature": "work_item_property_id: str, project_id: str | None=None, work_item_type_id: str | None=None, display_name: str | None=None, property_type: str | None=None, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, settings: dict | None=None, is_active: bool | None=None, is_multi: bool | None=None, validation_rules: dict | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemProperty",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:update_work_item_property"
+      ]
+    },
+    {
+      "name": "delete_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 353,
+      "signature": "work_item_property_id: str, project_id: str | None=None, work_item_type_id: str | None=None",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:delete_work_item_property"
+      ]
+    },
+    {
+      "name": "manage_work_item_type_properties",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 387,
+      "signature": "project_id: str, work_item_type_id: str, attach_ids: list[str] | None=None, detach_ids: list[str] | None=None",
+      "return_annotation": "list[str] | None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:manage_work_item_type_properties"
+      ]
+    },
+    {
+      "name": "list_work_item_property_options",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 428,
+      "signature": "property_id: str, project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemPropertyOption]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:list_work_item_property_options"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 458,
+      "signature": "property_id: str, option_id: str, project_id: str | None=None",
+      "return_annotation": "WorkItemPropertyOption",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:retrieve_work_item_property_option"
+      ]
+    },
+    {
+      "name": "create_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 489,
+      "signature": "property_id: str, name: str, project_id: str | None=None, description: str | None=None, color: str | None=None, is_default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemPropertyOption",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:create_work_item_property_option"
+      ]
+    },
+    {
+      "name": "update_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 538,
+      "signature": "property_id: str, option_id: str, project_id: str | None=None, name: str | None=None, description: str | None=None, color: str | None=None, is_default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemPropertyOption",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:update_work_item_property_option"
+      ]
+    },
+    {
+      "name": "delete_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 591,
+      "signature": "property_id: str, option_id: str, project_id: str | None=None",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:delete_work_item_property_option"
+      ]
+    },
+    {
+      "name": "get_work_item_property_value",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 620,
+      "signature": "project_id: str, work_item_id: str, property_id: str",
+      "return_annotation": "WorkItemPropertyValueDetail | list[WorkItemPropertyValueDetail]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:get_work_item_property_value"
+      ]
+    },
+    {
+      "name": "set_work_item_property_value",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 649,
+      "signature": "project_id: str, work_item_id: str, property_id: str, value: str | bool | int | float | list[str], external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "WorkItemPropertyValueDetail | list[WorkItemPropertyValueDetail]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:set_work_item_property_value"
+      ]
+    },
+    {
+      "name": "delete_work_item_property_value",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "source_line": 699,
+      "signature": "project_id: str, work_item_id: str, property_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_properties:delete_work_item_property_value"
+      ]
+    },
+    {
+      "name": "list_work_item_relation_definitions",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "source_line": 21,
+      "signature": "is_default: bool | None=None, is_active: bool | None=None",
+      "return_annotation": "dict[str, Any]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relation_definitions:list_work_item_relation_definitions"
+      ]
+    },
+    {
+      "name": "create_work_item_relation_definition",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "source_line": 62,
+      "signature": "name: str, outward: str | None=None, inward: str | None=None, is_active: bool | None=None, color: str | None=None",
+      "return_annotation": "WorkItemRelationDefinition",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relation_definitions:create_work_item_relation_definition"
+      ]
+    },
+    {
+      "name": "update_work_item_relation_definition",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "source_line": 99,
+      "signature": "definition_id: str, name: str | None=None, outward: str | None=None, inward: str | None=None, is_active: bool | None=None, color: str | None=None",
+      "return_annotation": "WorkItemRelationDefinition",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relation_definitions:update_work_item_relation_definition"
+      ]
+    },
+    {
+      "name": "delete_work_item_relation_definition",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "source_line": 135,
+      "signature": "definition_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relation_definitions:delete_work_item_relation_definition"
+      ]
+    },
+    {
+      "name": "list_work_item_relations",
+      "category": "work_item_relations",
+      "source_file": "plane_mcp/tools/work_item_relations.py",
+      "source_line": 37,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relations:list_work_item_relations"
+      ]
+    },
+    {
+      "name": "create_work_item_relation",
+      "category": "work_item_relations",
+      "source_file": "plane_mcp/tools/work_item_relations.py",
+      "source_line": 68,
+      "signature": "project_id: str, work_item_id: str, work_item_ids: list[str], relation_type: str | None=None, relation_definition_id: str | None=None, relation_definition_label: str | None=None",
+      "return_annotation": "list[WorkItemWithRelationType]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relations:create_work_item_relation"
+      ]
+    },
+    {
+      "name": "remove_work_item_relation",
+      "category": "work_item_relations",
+      "source_file": "plane_mcp/tools/work_item_relations.py",
+      "source_line": 130,
+      "signature": "project_id: str, work_item_id: str, related_work_item_id: str, is_dependency: bool",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_relations:remove_work_item_relation"
+      ]
+    },
+    {
+      "name": "list_work_item_types",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 20,
+      "signature": "project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemType]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:list_work_item_types"
+      ]
+    },
+    {
+      "name": "create_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 38,
+      "signature": "name: str, project_id: str | None=None, description: str | None=None, project_ids: list[str] | None=None, is_active: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemType",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:create_work_item_type"
+      ]
+    },
+    {
+      "name": "import_work_item_types_to_project",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 83,
+      "signature": "project_id: str, work_item_type_ids: list[str]",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:import_work_item_types_to_project"
+      ]
+    },
+    {
+      "name": "resolve_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 106,
+      "signature": "project_id: str, name: str",
+      "return_annotation": "WorkItemType",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:resolve_work_item_type"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 189,
+      "signature": "work_item_type_id: str, project_id: str | None=None",
+      "return_annotation": "WorkItemType",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:retrieve_work_item_type"
+      ]
+    },
+    {
+      "name": "update_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 216,
+      "signature": "work_item_type_id: str, project_id: str | None=None, name: str | None=None, description: str | None=None, project_ids: list[str] | None=None, is_active: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemType",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:update_work_item_type"
+      ]
+    },
+    {
+      "name": "delete_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "source_line": 267,
+      "signature": "work_item_type_id: str, project_id: str | None=None",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_item_types:delete_work_item_type"
+      ]
+    },
+    {
+      "name": "list_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 71,
+      "signature": "project_id: str | None=None, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:list_work_items"
+      ]
+    },
+    {
+      "name": "count_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 160,
+      "signature": "pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, group_by: str | None=None, sub_group_by: str | None=None",
+      "return_annotation": "dict[str, Any]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:count_work_items"
+      ]
+    },
+    {
+      "name": "create_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 209,
+      "signature": "project_id: str, name: str, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
+      "return_annotation": "WorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:create_work_item"
+      ]
+    },
+    {
+      "name": "retrieve_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 288,
+      "signature": "project_id: str, work_item_id: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
+      "return_annotation": "WorkItemDetail",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:retrieve_work_item"
+      ]
+    },
+    {
+      "name": "retrieve_work_item_by_identifier",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 330,
+      "signature": "work_item_identifier: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
+      "return_annotation": "WorkItemDetail",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:retrieve_work_item_by_identifier"
+      ]
+    },
+    {
+      "name": "update_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 390,
+      "signature": "project_id: str, work_item_id: str, name: str | None=None, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
+      "return_annotation": "WorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:update_work_item"
+      ]
+    },
+    {
+      "name": "delete_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 476,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:delete_work_item"
+      ]
+    },
+    {
+      "name": "manage_work_item_assignee",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 488,
+      "signature": "project_id: str, work_item_id: str, add_user_id: str | None=None, remove_user_id: str | None=None",
+      "return_annotation": "WorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:manage_work_item_assignee"
+      ]
+    },
+    {
+      "name": "manage_work_item_label",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 527,
+      "signature": "project_id: str, work_item_id: str, add_label_id: str | None=None, remove_label_id: str | None=None",
+      "return_annotation": "WorkItem",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:manage_work_item_label"
+      ]
+    },
+    {
+      "name": "list_archived_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 566,
+      "signature": "project_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
+      "return_annotation": "dict[str, Any]",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:list_archived_work_items"
+      ]
+    },
+    {
+      "name": "manage_work_item_archive",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 627,
+      "signature": "project_id: str, work_item_id: str, archive: bool",
+      "return_annotation": "None",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:manage_work_item_archive"
+      ]
+    },
+    {
+      "name": "search_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "source_line": 654,
+      "signature": "query: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
+      "return_annotation": "WorkItemSearch",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_items:search_work_items"
+      ]
+    },
+    {
+      "name": "list_work_logs",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "source_line": 15,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemWorkLog]",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_logs:list_work_logs"
+      ]
+    },
+    {
+      "name": "create_work_log",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "source_line": 40,
+      "signature": "project_id: str, work_item_id: str, duration: int | None=None, description: str | None=None",
+      "return_annotation": "WorkItemWorkLog",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_logs:create_work_log"
+      ]
+    },
+    {
+      "name": "update_work_log",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "source_line": 74,
+      "signature": "project_id: str, work_item_id: str, work_log_id: str, duration: int | None=None, description: str | None=None",
+      "return_annotation": "WorkItemWorkLog",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_logs:update_work_log"
+      ]
+    },
+    {
+      "name": "delete_work_log",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "source_line": 111,
+      "signature": "project_id: str, work_item_id: str, work_log_id: str",
+      "return_annotation": "None",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.work_logs:delete_work_log"
+      ]
+    },
+    {
+      "name": "get_workspace_members",
+      "category": "workspaces",
+      "source_file": "plane_mcp/tools/workspaces.py",
+      "source_line": 15,
+      "signature": "first_name: str | None=None, last_name: str | None=None, email: str | None=None, display_name: str | None=None, role_slug: str | None=None, is_active: bool | None=None, is_bot: bool | None=None, cursor: str | None=None, per_page: int | None=100, order_by: str | None=None",
+      "return_annotation": "PaginatedWorkspaceMemberResponse",
+      "disposition": "MCP-D-001",
+      "adapter": "shared_sdk_transport",
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "pageable",
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.workspaces:get_workspace_members"
+      ]
+    },
+    {
+      "name": "get_features",
+      "category": "workspaces",
+      "source_file": "plane_mcp/tools/workspaces.py",
+      "source_line": 58,
+      "signature": "project_id: str | None=None",
+      "return_annotation": "WorkspaceFeature | ProjectFeature",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "read",
+      "mutation": false,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.workspaces:get_features"
+      ]
+    },
+    {
+      "name": "update_workspace_features",
+      "category": "workspaces",
+      "source_file": "plane_mcp/tools/workspaces.py",
+      "source_line": 77,
+      "signature": "project_grouping: bool | None=None, initiatives: bool | None=None, teams: bool | None=None, customers: bool | None=None, wiki: bool | None=None, pi: bool | None=None",
+      "return_annotation": "WorkspaceFeature",
+      "gateway_status": "deferred",
+      "gateway_operation_id": null,
+      "behavior": "mutation",
+      "mutation": true,
+      "capabilities": [
+        "bounded_result",
+        "structured_error"
+      ],
+      "preserves": [
+        "caller_identity",
+        "oauth_and_api_key_auth",
+        "response_semantics",
+        "error_semantics",
+        "pagination_when_supported",
+        "bounded_results",
+        "audit_attribution"
+      ],
+      "sdk_entrypoints": [
+        "plane_mcp.tools.workspaces:update_workspace_features"
+      ]
+    }
+  ]
+}

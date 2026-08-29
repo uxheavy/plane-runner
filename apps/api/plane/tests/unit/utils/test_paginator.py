@@ -121,3 +121,14 @@ class TestPaginateGroupByValidation:
             paginator_cls=_StubGroupedPaginator,
         )
         assert response.data["grouped_by"] is None
+
+    @pytest.mark.parametrize("per_page", ["0", "-1", "not-an-integer", "101"])
+    def test_per_page_bounds_fail_at_shared_validation_seam(self, per_page):
+        with pytest.raises(ParseError):
+            BasePaginator().get_per_page(_make_request(per_page=per_page), default_per_page=50, max_per_page=100)
+
+    @pytest.mark.parametrize("per_page", ["1", "100"])
+    def test_per_page_inclusive_bounds_are_accepted(self, per_page):
+        assert BasePaginator().get_per_page(
+            _make_request(per_page=per_page), default_per_page=50, max_per_page=100
+        ) == int(per_page)

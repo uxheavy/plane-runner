@@ -6,9 +6,25 @@
 
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+
+from plane.agent.runtime.config import RuntimeConfigurationError, runtime_settings_from_environment
+
 from .common import *  # noqa
 
 DEBUG = True
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = False
+PLANE_AUDIT_MIGRATION_ROLE = DATABASES["default"].get("USER") or "plane"  # noqa: F405
+
+
+enabled = os.environ.get("PLANE_AGENT_RUNTIME_ENABLED", "0")
+if enabled not in {"0", "1"}:
+    raise ImproperlyConfigured("PLANE_AGENT_RUNTIME_ENABLED must be 0 or 1")
+if enabled == "1":
+    try:
+        globals().update(runtime_settings_from_environment(os.environ))
+    except RuntimeConfigurationError as exc:
+        raise ImproperlyConfigured(f"Local Agent runtime configuration is invalid: {exc}") from exc
 
 # Debug Toolbar settings
 INSTALLED_APPS += ("debug_toolbar",)  # noqa

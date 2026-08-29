@@ -3,7 +3,66 @@
 # See the LICENSE file for details.
 
 from .analytic import AnalyticView
+from .agent import (
+    AgentActor,
+    AgentHRProposal,
+    AgentRole,
+    AssignmentContract,
+    AssignmentState,
+    EvaluatorReview,
+    EvaluatorVerdict,
+    HRProposalKind,
+    HRProposalState,
+    InputEventKind,
+    InvocationState,
+    OutcomeState,
+    OutcomeSubmission,
+    ProfileVersion,
+    RecoveryIntent,
+    RunAttempt,
+    RunInputEvent,
+    RunLineageReason,
+    RunState,
+    RunTerminalEvent,
+    RuntimeEventIngress,
+    RuntimeControlState,
+    RuntimeInvocationControl,
+    RuntimeExitEvidence,
+    RuntimeInvocation,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
+    RuntimeReconciliation,
+    FreshAssignmentDecision,
+    ReconciliationState,
+    RuntimeUsageObservation,
+    TerminalEventKind,
+    TerminalEventSource,
+)
+from .agent_context import (
+    AgentChangeProposal,
+    AgentMemoryEntry,
+    AgentMemoryKind,
+    AgentMemoryRevision,
+    AgentMemoryVisibility,
+    AgentProposalKind,
+    AgentProposalState,
+    AgentProvenanceKind,
+    AgentRevisionState,
+    AgentSchedule,
+    AgentScheduleFire,
+    AgentScheduleFireState,
+    AgentScheduleState,
+    AgentSkillDefinition,
+    AgentSkillRevision,
+    AgentSkillVisibility,
+)
 from .api import APIActivityLog, APIToken
+from .operation_gateway import (
+    OperationGatewayAudit,
+    OperationGatewayIdempotency,
+    OperationGatewayPublication,
+    OperationGatewayQuotaBucket,
+)
 from .asset import FileAsset
 from .base import BaseModel
 from .cycle import Cycle, CycleIssue, CycleUserProperties

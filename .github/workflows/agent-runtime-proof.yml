@@ -1,0 +1,46 @@
+name: Agent runtime proof
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/agent-runtime-proof.yml"
+      - "apps/api/Dockerfile.g4"
+      - "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
+      - "tools/agent-g4-*.json"
+      - "tools/agent-g4-rollback-drill.py"
+      - "tools/build-agent-api-image.py"
+      - "tools/build-agent-runtime-image.py"
+      - "tools/tests/test_agent_g4_operations.py"
+      - "tools/tests/test_build_agent_api_image.py"
+      - "tools/tests/test_runtime_image_builder.py"
+      - "tools/verify-agent-g3.sh"
+      - "tools/verify-agent-g4-operations.py"
+      - "tools/verify-agent-g4.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  proof-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/requirements/test.txt
+      - run: python -m pip install pytest==9.0.3
+      - run: bash -n tools/verify-agent-g3.sh tools/verify-agent-g4.sh
+      - run: >-
+          python -m pytest -q
+          tools/tests/test_agent_g4_operations.py
+          tools/tests/test_build_agent_api_image.py
+          tools/tests/test_runtime_image_builder.py

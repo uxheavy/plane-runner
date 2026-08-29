@@ -643,9 +643,11 @@ class BasePaginator:
     def get_per_page(self, request, default_per_page=1000, max_per_page=1000):
         try:
             per_page = int(request.GET.get("per_page", default_per_page))
-        except ValueError:
+        except (TypeError, ValueError):
             raise ParseError(detail="Invalid per_page parameter.")
 
+        if per_page < 1:
+            raise ParseError(detail="Invalid per_page parameter. Must be at least 1.")
         max_per_page = max(max_per_page, default_per_page)
         if per_page > max_per_page:
             raise ParseError(detail=f"Invalid per_page value. Cannot exceed {max_per_page}.")

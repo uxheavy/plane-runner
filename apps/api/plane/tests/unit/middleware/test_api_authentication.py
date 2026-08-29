@@ -15,7 +15,7 @@ Covers the access-control guarantees of the external API key authentication:
 import pytest
 from rest_framework.exceptions import AuthenticationFailed
 
-from plane.api.middleware.api_authentication import APIKeyAuthentication
+from plane.api.middleware.api_authentication import APIKeyAuthentication, APIKeyOrBearerAuthentication
 from plane.db.models import APIToken
 
 
@@ -44,3 +44,17 @@ class TestAPIKeyAuthentication:
 
         with pytest.raises(AuthenticationFailed):
             APIKeyAuthentication().validate_api_token(token.token)
+
+    def test_gateway_authentication_accepts_bearer_wire_without_changing_token_resolution(self, rf):
+        request = rf.post("/api/v1/operations/", HTTP_AUTHORIZATION="Bearer oauth-token")
+
+        assert APIKeyOrBearerAuthentication().get_api_token(request) == "oauth-token"
+
+    def test_gateway_authentication_prefers_api_key_when_both_wires_are_present(self, rf):
+        request = rf.post(
+            "/api/v1/operations/",
+            HTTP_X_API_KEY="api-token",
+            HTTP_AUTHORIZATION="Bearer oauth-token",
+        )
+
+        assert APIKeyOrBearerAuthentication().get_api_token(request) == "api-token"

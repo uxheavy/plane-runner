@@ -179,35 +179,18 @@ const observation = (value: JsonValue, observedAt: string, version?: Timestamp):
   return { ok: true, observed };
 };
 
-const fieldLabel = (field: WorkItemContextField): string => {
-  switch (field) {
-    case "name":
-      return "Name";
-    case "description":
-      return "Description";
-    case "state":
-      return "State";
-    case "priority":
-      return "Priority";
-    case "assignees":
-      return "Assignees";
-    case "labels":
-      return "Labels";
-    case "start_date":
-      return "Start date";
-    case "target_date":
-      return "Target date";
-    case "estimate":
-      return "Estimate";
-    case "cycle":
-      return "Cycle";
-    case "module":
-      return "Modules";
-    default: {
-      const exhaustive: never = field;
-      return exhaustive;
-    }
-  }
+const fieldLabels: Record<WorkItemContextField, string> = {
+  name: "Name",
+  description: "Description",
+  state: "State",
+  priority: "Priority",
+  assignees: "Assignees",
+  labels: "Labels",
+  start_date: "Start date",
+  target_date: "Target date",
+  estimate: "Estimate",
+  cycle: "Cycle",
+  module: "Modules",
 };
 
 const entityLabel = (reference: EntityReferenceV1): string => {
@@ -420,7 +403,7 @@ export const createPlaneEntityContextSource = ({
       case "entity":
         return entityLabel(reference);
       case "field":
-        return fieldLabel(reference.fieldKey);
+        return fieldLabels[reference.fieldKey];
       case "editor_block":
       case "editor_range":
         return "Editor block";

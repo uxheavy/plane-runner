@@ -1,8 +1,8 @@
 x-db-env: &db-env
   PGHOST: ${PGHOST:-plane-db}
   PGDATABASE: ${PGDATABASE:-plane}
-  POSTGRES_USER: ${POSTGRES_USER:-plane}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plane}
+  POSTGRES_USER: ${POSTGRES_PROVISIONER_ROLE:-plane_provisioner}
+  POSTGRES_PASSWORD: ${POSTGRES_PROVISIONER_PASSWORD:-change-this-provisioner-password}
   POSTGRES_DB: ${POSTGRES_DB:-plane}
   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
   PGDATA: ${PGDATA:-/var/lib/postgresql/data}
@@ -52,7 +52,12 @@ x-app-env: &app-env
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
   GUNICORN_WORKERS: 1
   USE_MINIO: ${USE_MINIO:-1}
-  DATABASE_URL: ${DATABASE_URL:-postgresql://plane:plane@plane-db/plane}
+  PLANE_AUDIT_SCHEMA: ${PLANE_AUDIT_SCHEMA:-public}
+  PLANE_AUDIT_RUNTIME_ROLE: ${PLANE_AUDIT_RUNTIME_ROLE:-plane_runtime}
+  PLANE_AUDIT_GOVERNANCE_ROLE: ${PLANE_AUDIT_GOVERNANCE_ROLE:-plane_audit_owner}
+  PLANE_AUDIT_MIGRATION_ROLE: ${PLANE_AUDIT_MIGRATION_ROLE:-plane_migrator}
+  PLANE_AUDIT_PROVISIONER_ROLE: ${PLANE_AUDIT_PROVISIONER_ROLE:-plane_provisioner}
+  PLANE_AUDIT_ENFORCE_ROLE_SEPARATION: ${PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:-1}
   SECRET_KEY: ${SECRET_KEY}
   AMQP_URL: ${AMQP_URL:-amqp://plane:plane@plane-mq:5672/plane}
   API_KEY_RATE_LIMIT: ${API_KEY_RATE_LIMIT:-60/minute}
@@ -60,6 +65,59 @@ x-app-env: &app-env
   LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY}
   WEBHOOK_ALLOWED_IPS: ${WEBHOOK_ALLOWED_IPS:-}
   WEBHOOK_ALLOWED_HOSTS: ${WEBHOOK_ALLOWED_HOSTS:-}
+  PLANE_AGENT_RUNTIME_URL: ${PLANE_AGENT_RUNTIME_URL:-http://agent-runtime:8080}
+  PLANE_AGENT_RUNTIME_HOST_URL: ${PLANE_AGENT_RUNTIME_HOST_URL:-http://api:8091}
+  PLANE_AGENT_RUNTIME_HOST_BIND: ${PLANE_AGENT_RUNTIME_HOST_BIND:-0.0.0.0}
+  PLANE_AGENT_RUNTIME_HOST_PORT: ${PLANE_AGENT_RUNTIME_HOST_PORT:-8091}
+  PLANE_AGENT_RUNTIME_DISPATCH_PATH: ${PLANE_AGENT_RUNTIME_DISPATCH_PATH:-/v1/runtime/dispatch}
+  PLANE_AGENT_RUNTIME_SECRET_FILE: /run/secrets/plane_agent_runtime
+  PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER: ${PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER:-command:/usr/local/bin/plane-agent-runtime-credential-resolver}
+  PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE: ${PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE:-/run/plane-agent-credentials/revocations.json}
+
+x-agent-runtime-env: &agent-runtime-env
+  DJANGO_SETTINGS_MODULE: plane.settings.common
+  PLANE_AGENT_RUNTIME_URL: ${PLANE_AGENT_RUNTIME_URL:-http://agent-runtime:8080}
+  PLANE_AGENT_RUNTIME_DISPATCH_PATH: ${PLANE_AGENT_RUNTIME_DISPATCH_PATH:-/v1/runtime/dispatch}
+  PLANE_AGENT_RUNTIME_LEDGER_PATH: ${PLANE_AGENT_RUNTIME_LEDGER_PATH:-/run/plane-agent-runtime/dispatch-ledger.sqlite}
+  PLANE_AGENT_RUNTIME_SECRET_FILE: /run/secrets/plane_agent_runtime
+  PLANE_AGENT_RUNTIME_HEALTH_PATH: ${PLANE_AGENT_RUNTIME_HEALTH_PATH:-/health/ready}
+  PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE: ${PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE:-/run/plane-agent-runtime/safety-stop}
+  PLANE_AGENT_RUNTIME_NETWORK_POLICY: none
+  PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE: ${PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE:-/run/plane-agent-credentials/revocations.json}
+  PLANE_AGENT_RUNTIME_PROVIDER: ${PLANE_AGENT_RUNTIME_PROVIDER:-xai}
+  PLANE_AGENT_RUNTIME_PROVIDER_HOST: ${PLANE_AGENT_RUNTIME_PROVIDER_HOST:-api.x.ai}
+  PLANE_AGENT_RUNTIME_PROVIDER_PATH: ${PLANE_AGENT_RUNTIME_PROVIDER_PATH:-/v1/chat/completions}
+  PLANE_AGENT_RUNTIME_PROVIDER_MODELS: ${PLANE_AGENT_RUNTIME_PROVIDER_MODELS:-grok-4}
+  PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME: ${PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME:-api_key}
+  PLANE_AGENT_RUNTIME_BIND: 0.0.0.0
+  PLANE_AGENT_RUNTIME_PORT: 8080
+
+x-runtime-db-env: &runtime-db-env
+  DATABASE_URL: ${DATABASE_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
+  DATABASE_RUNTIME_URL: ${DATABASE_RUNTIME_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
+
+x-migration-db-env: &migration-db-env
+  DATABASE_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
+  DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
+  PLANE_DB_MIGRATION_MODE: "1"
+  PGHOST: ${PGHOST:-plane-db}
+  PGDATABASE: ${PGDATABASE:-plane}
+  POSTGRES_USER: ${PLANE_AUDIT_MIGRATION_ROLE:-plane_migrator}
+  POSTGRES_PASSWORD: ${PLANE_AUDIT_MIGRATION_PASSWORD:-change-this-migration-password}
+  POSTGRES_DB: ${POSTGRES_DB:-plane}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+
+x-provisioner-db-env: &provisioner-db-env
+  DATABASE_PROVISIONER_URL: ${DATABASE_PROVISIONER_URL:-postgresql://plane_provisioner:change-this-provisioner-password@plane-db/plane}
+  PLANE_AUDIT_RUNTIME_PASSWORD: ${PLANE_AUDIT_RUNTIME_PASSWORD:-change-this-runtime-password}
+  PLANE_AUDIT_MIGRATION_PASSWORD: ${PLANE_AUDIT_MIGRATION_PASSWORD:-change-this-migration-password}
+  PLANE_DB_PROVISIONER_MODE: "1"
+  PGHOST: ${PGHOST:-plane-db}
+  PGDATABASE: ${PGDATABASE:-plane}
+  POSTGRES_USER: ${POSTGRES_PROVISIONER_ROLE:-plane_provisioner}
+  POSTGRES_PASSWORD: ${POSTGRES_PROVISIONER_PASSWORD:-change-this-provisioner-password}
+  POSTGRES_DB: ${POSTGRES_DB:-plane}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
 
 services:
   web:
@@ -114,12 +172,25 @@ services:
         condition: any
     volumes:
       - logs_api:/code/plane/logs
+      - agent_runtime_credential_state:/run/plane-agent-credentials
+    expose:
+      - "8091"
+    networks:
+      - default
+      - agent_runtime_internal
     environment:
-      <<: [*app-env, *db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    secrets:
+      - plane_agent_runtime
     depends_on:
-      - plane-db
-      - plane-redis
-      - plane-mq
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+      plane-mq:
+        condition: service_started
+      provisioner-final:
+        condition: service_completed_successfully
 
   worker:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -130,13 +201,60 @@ services:
         condition: any
     volumes:
       - logs_worker:/code/plane/logs
+      - agent_runtime_credential_state:/run/plane-agent-credentials
+    expose:
+      - "8091"
+    networks:
+      - default
+      - agent_runtime_internal
     environment:
-      <<: [*app-env, *db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      PLANE_AGENT_RUNTIME_HOST_URL: ${PLANE_AGENT_RUNTIME_WORKER_HOST_URL:-http://worker:8091}
+    secrets:
+      - plane_agent_runtime
     depends_on:
-      - api
-      - plane-db
-      - plane-redis
-      - plane-mq
+      provisioner-final:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+      plane-mq:
+        condition: service_started
+
+  supervisor:
+    image: makeplane/plane-backend:${APP_RELEASE:-stable}
+    command: python manage.py agent_supervisor_consumer
+    profiles: [agent]
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    volumes:
+      - logs_worker:/code/plane/logs
+      - agent_runtime_credential_state:/run/plane-agent-credentials
+    expose:
+      - "8091"
+    networks:
+      - default
+      - agent_runtime_internal
+    environment:
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      PLANE_AGENT_RUNTIME_HOST_URL: ${PLANE_AGENT_RUNTIME_SUPERVISOR_HOST_URL:-http://supervisor:8091}
+    secrets:
+      - plane_agent_runtime
+      - plane_agent_provider_credentials
+    depends_on:
+      provisioner-final:
+        condition: service_completed_successfully
+      agent-runtime:
+        condition: service_healthy
+      plane-db:
+        condition: service_started
+      plane-mq:
+        condition: service_started
 
   beat-worker:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -148,12 +266,59 @@ services:
     volumes:
       - logs_beat-worker:/code/plane/logs
     environment:
-      <<: [*app-env, *db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    secrets:
+      - plane_agent_runtime
     depends_on:
-      - api
-      - plane-db
-      - plane-redis
-      - plane-mq
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+      plane-mq:
+        condition: service_started
+
+  agent-runtime:
+    image: ${PLANE_AGENT_RUNTIME_IMAGE:-plane-agent-runtime:hermes-df166ad4-v147-150d5b6d}
+    profiles: [agent]
+    entrypoint: ["python3", "-m", "plane.agent.runtime.service"]
+    command: []
+    user: "${PLANE_AGENT_RUNTIME_UID:-65532}:${PLANE_AGENT_RUNTIME_GID:-65532}"
+    read_only: true
+    networks:
+      - agent_runtime_internal
+      - agent_runtime_egress
+    init: true
+    expose:
+      - "8080"
+    environment:
+      <<: *agent-runtime-env
+    secrets:
+      - plane_agent_runtime
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /run/plane-agent-runtime:rw,noexec,nosuid,nodev,size=1m
+    volumes:
+      - agent_runtime_credential_state:/run/plane-agent-credentials:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: ${PLANE_AGENT_RUNTIME_CPUS:-1.0}
+    mem_limit: ${PLANE_AGENT_RUNTIME_MEMORY_LIMIT:-768m}
+    pids_limit: ${PLANE_AGENT_RUNTIME_PIDS_LIMIT:-128}
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/health/ready\", timeout=2)' "]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      api:
+        condition: service_started
+      worker:
+        condition: service_started
 
   migrator:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -165,10 +330,110 @@ services:
     volumes:
       - logs_migrator:/code/plane/logs
     environment:
-      <<: [*app-env, *db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *migration-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
-      - plane-db
-      - plane-redis
+      provisioner:
+        condition: service_completed_successfully
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+
+  x-provisioner-service: &provisioner-service
+    image: makeplane/plane-backend:${APP_RELEASE:-stable}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - logs_provisioner:/code/plane/logs
+    environment:
+      <<: [*app-env, *provisioner-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+
+  provisioner:
+    <<: *provisioner-service
+    command: ./bin/docker-entrypoint-provisioner.sh --phase=before-migrate
+    depends_on:
+      db-role-transition:
+        condition: service_completed_successfully
+
+  db-role-transition:
+    image: postgres:15.7-alpine
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    environment:
+      PGHOST: ${PGHOST:-plane-db}
+      PGDATABASE: ${PGDATABASE:-plane}
+      POSTGRES_USER: ${POSTGRES_USER:-plane}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plane}
+      POSTGRES_PROVISIONER_ROLE: ${POSTGRES_PROVISIONER_ROLE:-plane_provisioner}
+      POSTGRES_PROVISIONER_PASSWORD: ${POSTGRES_PROVISIONER_PASSWORD:-change-this-provisioner-password}
+      PLANE_AUDIT_MIGRATION_ROLE: ${PLANE_AUDIT_MIGRATION_ROLE:-plane_migrator}
+      PLANE_AUDIT_MIGRATION_PASSWORD: ${PLANE_AUDIT_MIGRATION_PASSWORD:-change-this-migration-password}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        if PGPASSWORD="$$POSTGRES_PASSWORD" psql --no-psqlrc --username="$$POSTGRES_USER" --command='SELECT 1' >/dev/null 2>&1; then
+          export PGUSER="$$POSTGRES_USER" PGPASSWORD="$$POSTGRES_PASSWORD"
+        else
+          export PGUSER="$$POSTGRES_PROVISIONER_ROLE" PGPASSWORD="$$POSTGRES_PROVISIONER_PASSWORD"
+        fi
+        psql --no-psqlrc --set=ON_ERROR_STOP=1 \
+          --set=legacy_role="$$POSTGRES_USER" \
+          --set=provisioner_role="$$POSTGRES_PROVISIONER_ROLE" \
+          --set=provisioner_password="$$POSTGRES_PROVISIONER_PASSWORD" \
+          --set=migration_role="$$PLANE_AUDIT_MIGRATION_ROLE" \
+          --set=migration_password="$$PLANE_AUDIT_MIGRATION_PASSWORD" <<'SQL'
+        SELECT format('CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'provisioner_role', :'provisioner_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'provisioner_role') \gexec
+        SELECT format('CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'migration_role', :'migration_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migration_role') \gexec
+        SELECT format(
+          'ALTER %s %I.%I OWNER TO %I',
+          CASE object_info.relkind
+            WHEN 'S' THEN 'SEQUENCE'
+            WHEN 'v' THEN 'VIEW'
+            WHEN 'm' THEN 'MATERIALIZED VIEW'
+            WHEN 'f' THEN 'FOREIGN TABLE'
+            ELSE 'TABLE'
+          END,
+          schema_info.nspname,
+          object_info.relname,
+          :'migration_role'
+        )
+        FROM pg_class AS object_info
+        JOIN pg_namespace AS schema_info ON schema_info.oid = object_info.relnamespace
+        JOIN pg_roles AS owner_info ON owner_info.oid = object_info.relowner
+        WHERE owner_info.rolname = :'legacy_role'
+          AND schema_info.nspname NOT LIKE 'pg\_%' ESCAPE '\'
+          AND schema_info.nspname <> 'information_schema'
+          AND object_info.relkind IN ('r', 'p', 'S', 'v', 'm', 'f')
+        ORDER BY CASE object_info.relkind WHEN 'S' THEN 1 ELSE 0 END
+        \gexec
+        SELECT format('ALTER SCHEMA public OWNER TO %I', :'provisioner_role') \gexec
+        SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'migration_role') \gexec
+        SELECT format('ALTER DATABASE %I OWNER TO %I', current_database(), :'provisioner_role') \gexec
+        SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'migration_role', :'migration_password')
+        WHERE (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) \gexec
+        SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'provisioner_role', :'provisioner_password')
+        WHERE (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) \gexec
+        SELECT format('ALTER ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'legacy_role')
+        WHERE :'legacy_role' <> :'provisioner_role'
+          AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'legacy_role' AND rolcanlogin) \gexec
+        SQL
+    depends_on:
+      plane-db:
+        condition: service_started
+
+  provisioner-final:
+    <<: *provisioner-service
+    command: ./bin/docker-entrypoint-provisioner.sh --phase=after-migrate
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
 
   # Comment this if you already have a database running
   plane-db:
@@ -252,6 +517,24 @@ volumes:
   logs_worker:
   logs_beat-worker:
   logs_migrator:
+  logs_provisioner:
   rabbitmq_data:
   proxy_config:
   proxy_data:
+  agent_runtime_credential_state:
+
+networks:
+  default:
+  agent_runtime_internal:
+    internal: true
+  agent_runtime_egress:
+    driver: bridge
+
+secrets:
+  plane_agent_runtime:
+    environment: PLANE_AGENT_RUNTIME_SECRET
+  # The deployment provisions this external secret. The API/worker resolver
+  # accepts only the opaque runtime reference and reads this fixed mount.
+  plane_agent_provider_credentials:
+    external: true
+    name: ${PLANE_AGENT_RUNTIME_PROVIDER_SECRET_NAME:-community_plane_agent_provider_credentials}

@@ -23,6 +23,14 @@ RUN apk --no-cache add \
     "libc-dev" \
     "linux-headers"
 
+# Node 21 in Alpine 3.20 has no built-in TypeScript stripper.  Keep the
+# established compiler in the image so the restricted Code Mode child can
+# preprocess generated TypeScript without a handwritten partial parser.
+RUN apk --no-cache \
+    --repository=https://dl-cdn.alpinelinux.org/alpine/v3.21/main \
+    --repository=https://dl-cdn.alpinelinux.org/alpine/v3.21/community \
+    add "typescript=5.4.5-r1"
+
 WORKDIR /code
 
 COPY requirements.txt ./requirements.txt
@@ -33,9 +41,11 @@ RUN pip install -r requirements/local.txt --compile --no-cache-dir
 
 
 COPY . .
+COPY ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver
 
 RUN mkdir -p /code/plane/logs
 RUN chmod -R +x /code/bin
+RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver
 RUN chmod -R 777 /code
 
 
@@ -43,4 +53,3 @@ RUN chmod -R 777 /code
 EXPOSE 8000
 
 CMD [ "./bin/docker-entrypoint-api-local.sh" ]
-

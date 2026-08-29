@@ -62,33 +62,6 @@ const referenceKey = (reference: SemanticReferenceV1): string => {
   }
 };
 
-const cloneReference = (reference: SemanticReferenceV1): SemanticReferenceV1 => {
-  switch (reference.kind) {
-    case "entity":
-      return { ...reference };
-    case "field":
-      return { kind: "field", entity: { ...reference.entity }, fieldKey: reference.fieldKey };
-    case "editor_block":
-      return { kind: "editor_block", document: { ...reference.document }, blockId: reference.blockId };
-    case "editor_range":
-      return {
-        kind: "editor_range",
-        document: { ...reference.document },
-        start: { ...reference.start },
-        end: { ...reference.end },
-      };
-    default: {
-      const exhaustive: never = reference;
-      return exhaustive;
-    }
-  }
-};
-
-const cloneTarget = (target: SemanticTarget): SemanticTarget => ({
-  reference: cloneReference(target.reference),
-  ...(target.parent ? { parent: cloneReference(target.parent) } : {}),
-});
-
 const getComposedParent = (element: Element): Element | null => {
   if (element.parentElement) return element.parentElement;
 
@@ -215,7 +188,7 @@ export const createSemanticContextPicker = ({
     return (
       [...registrations].find(
         (candidate) => eligible(candidate) && referenceKey(candidate.target.reference) === parentKey
-      ) ?? { element: registration.element, target: { reference: cloneReference(parent) } }
+      ) ?? { element: registration.element, target: { reference: structuredClone(parent) } }
     );
   };
 
@@ -233,7 +206,7 @@ export const createSemanticContextPicker = ({
       const current = registrationsByElement.get(element);
       if (current) disposeRegistration(current);
 
-      const registration = { element, target: cloneTarget(target) } satisfies Registration;
+      const registration = { element, target: structuredClone(target) } satisfies Registration;
       registrationsByElement.set(element, registration);
       registrations.add(registration);
       return () => disposeRegistration(registration);

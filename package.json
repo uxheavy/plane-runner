@@ -18,8 +18,14 @@
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
     "check:copyright": "pnpm --filter=@plane/codemods copyright-headers --check --changed-from upstream/preview",
+    "check:local-dev": "./tools/check-local-dev.sh",
+    "check:local-dev:agent": "./tools/check-local-dev.sh --agent",
+    "check:local-dev:runtime": "./tools/check-local-dev.sh --runtime",
+    "verify:agent-g3": "./tools/verify-agent-g3.sh",
+    "verify:agent-g4": "./tools/verify-agent-g4.sh",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest",
+    "verify:api-migrations": "./tools/verify-api-migrations.sh",
     "verify:chat-context": "./packages/chat-context/verify-release.sh"
   },
   "devDependencies": {

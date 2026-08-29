@@ -1,0 +1,112 @@
+{
+  "manifestVersion": "plane-agent-g4/provider-free-v1",
+  "sourceBinding": {
+    "runtimeSourceCandidate": "150d5b6d85c8da81d641c84a2d47909364816044",
+    "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+    "acceptedG3HermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb"
+  },
+  "authority": [
+    "AGENTS.md",
+    "docs/agent-tooling/README.md",
+    "docs/decisions/0001-plane-agent-tooling-architecture.md",
+    "docs/decisions/0002-autonomous-agent-operations.md",
+    "docs/decisions/0003-plane-agent-native-product-boundary.md",
+    "docs/decisions/0004-fork-hermes-as-hidden-execution-kernel.md",
+    "docs/decisions/0005-plane-owned-agent-profiles.md",
+    "docs/decisions/0006-assignment-and-run-lifecycle.md",
+    "docs/decisions/0007-adaptive-plane-tool-exposure.md",
+    "docs/decisions/0008-scoped-memory-and-context.md",
+    "docs/decisions/0009-workflows-and-agent-delegation.md",
+    "docs/decisions/0010-plane-runtime-contract.md",
+    "apps/api/plane/agent/AGENTS.md",
+    "apps/api/plane/agent/runtime/AGENTS.md",
+    "tools/agent-g4-operations-v1.json"
+  ],
+  "contracts": ["apps/api/plane/agent/lifecycle/contract_artifacts/v1/manifest.json"],
+  "pins": {
+    "apiArtifact": {
+      "contract": "plane.operation/v1",
+      "imageDigest": "sha256:3f07848bf00678ed7a70be1bfaa1dd4c773d9da74a43f5fea4f0acf6123e11aa",
+      "imageTag": "plane-agent-api:g4-v146-150d5b6d85",
+      "sourceRevision": "150d5b6d85c8da81d641c84a2d47909364816044"
+    },
+    "hermesCommit": "df166ad411654c3cae67e2dc079ea60e6c91f85e",
+    "mcpGitlink": "d65df7c94bcd41a3c7795c40c1227e2199889d71",
+    "runtimeContract": "plane.agent-runtime/v1",
+    "runtimeImageDigest": "sha256:94a7fe717ab8c8bf1eb3a2bfb8f4c1574098dc7e1f67b6a16269d1626f2f0224",
+    "runtimeImageRevision": "150d5b6d85c8da81d641c84a2d47909364816044",
+    "runtimeImageTag": "plane-agent-runtime:hermes-df166ad4-v147-150d5b6d",
+    "sdkGitlink": "4403116b3601a29d7a2c507c8bef1db768574142"
+  },
+  "offlineEvidence": {
+    "load": {
+      "path": "apps/api/plane/tests/fixtures/agent_g4_load_thresholds.json",
+      "sha256": "355d1f8bdc70761b85d27f1cc9fe027c93baa506be90b68948d1d702414889ec",
+      "testPath": "plane/tests/contract/api/test_operation_gateway_g4.py"
+    },
+    "rollback": {
+      "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
+      "sha256": "75210f1f18196476e54bd6439fda32bf8f79ab130f95a1c5b9b588ce5d5ab9ca",
+      "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
+    },
+    "runtimeService": {
+      "path": "apps/api/plane/tests/unit/agent/test_runtime_supervisor.py",
+      "sha256": "08ebb459526fac2951ff33e30d422a2015c9c189f26d458a15ebe0b511117c83",
+      "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py"
+    }
+  },
+  "offlineFixtures": ["tools/agent-g4-runtime-red-team.py", "tools/agent-g4-rollback-drill.py"],
+  "pytestPaths": [
+    "plane/tests/unit/agent/test_g4_runtime_boundary.py",
+    "plane/tests/unit/agent/test_g4_runtime_cross_process.py",
+    "plane/tests/unit/agent/test_runtime_supervisor.py",
+    "plane/tests/contract/api/test_operation_gateway_g4.py",
+    "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
+    "plane/tests/contract/api/test_agent_operator_readback_g4.py",
+    "plane/tests/contract/api/test_agent_runtime_production.py",
+    "plane/tests/contract/api/test_local_runtime_configuration.py"
+  ],
+  "scripts": [
+    "tools/check-agent-settings-reuse.py",
+    "tools/check-local-dev.sh",
+    "tools/check-local-dev-topology.py",
+    "tools/verify-api-migrations.sh",
+    "tools/verify-agent-g3.sh",
+    "tools/verify-agent-g4.sh",
+    "tools/agent-verifier-lock.py",
+    "tools/agent-g4-runtime-red-team.py",
+    "tools/agent-g4-rollback-drill.py",
+    "tools/verify-agent-g4-operations.py",
+    "tools/build-agent-api-image.py",
+    "tools/build-agent-runtime-image.py",
+    "apps/api/Dockerfile.g4",
+    "apps/api/.dockerignore"
+  ],
+  "stages": [
+    "preflight",
+    "g3-prerequisite",
+    "static-scope",
+    "g4-runtime-contracts",
+    "g4-cross-process",
+    "g4-runtime-service",
+    "g4-runtime-red-team",
+    "g4-gateway-workload",
+    "g4-rollback",
+    "g4-operator-readback",
+    "g4-production-configuration",
+    "provider-boundary",
+    "cleanup"
+  ],
+  "runbook": "docs/agent-tooling/operations/agent-runtime-operations.md",
+  "verifierTests": [
+    "tools/tests/test_agent_g4_operations.py",
+    "tools/tests/test_build_agent_api_image.py",
+    "tools/tests/test_runtime_image_builder.py"
+  ],
+  "cleanup": {
+    "assertZeroLabeledResources": true,
+    "redTeamResourceLabels": {
+      "com.uxheavy.plane.agent-g4-runtime": "true"
+    }
+  }
+}

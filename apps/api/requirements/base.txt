@@ -26,6 +26,8 @@ faker==25.0.0
 django-filter==25.2
 # json model
 jsonmodels==2.7.0
+# runtime contract validation
+jsonschema==4.25.1
 # storage
 django-storages==1.14.6
 # user management

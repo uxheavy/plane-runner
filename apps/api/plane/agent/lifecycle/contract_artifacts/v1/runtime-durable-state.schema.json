@@ -1,0 +1,1178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.dev/schemas/plane.agent-runtime/v1/RuntimeDurableState.schema.json",
+  "title": "RuntimeDurableState",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "stateVersion",
+    "binding",
+    "state",
+    "revision",
+    "stateDigest",
+    "lastAcceptedSequence",
+    "acceptedEvents",
+    "acceptedHumanInputAnswers",
+    "acceptedExits"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "plane.agent-runtime/v1"
+    },
+    "stateVersion": {
+      "const": "v1"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspaceRef", "actorRef", "profileVersionRef", "runId", "snapshotContentDigest"],
+      "properties": {
+        "workspaceRef": {
+          "$ref": "#/$defs/workspaceRef"
+        },
+        "actorRef": {
+          "$ref": "#/$defs/actorRef"
+        },
+        "profileVersionRef": {
+          "$ref": "#/$defs/profileVersionRef"
+        },
+        "runId": {
+          "$ref": "#/$defs/runId"
+        },
+        "snapshotContentDigest": {
+          "$ref": "#/$defs/runSnapshotContentDigest"
+        }
+      }
+    },
+    "state": {
+      "enum": ["queued", "running", "waiting_for_input", "succeeded", "failed", "blocked", "cancelled"]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "stateDigest": {
+      "$ref": "#/$defs/contentDigest"
+    },
+    "previousRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "previousStateDigest": {
+      "$ref": "#/$defs/contentDigest"
+    },
+    "lastAcceptedSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "acceptedEvents": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspaceRef",
+          "actorRef",
+          "profileVersionRef",
+          "runId",
+          "snapshotContentDigest",
+          "invocationId",
+          "eventId",
+          "idempotencyKey",
+          "correlationId",
+          "causationRef",
+          "sequence",
+          "fingerprint",
+          "kind"
+        ],
+        "properties": {
+          "workspaceRef": {
+            "$ref": "#/$defs/workspaceRef"
+          },
+          "actorRef": {
+            "$ref": "#/$defs/actorRef"
+          },
+          "profileVersionRef": {
+            "$ref": "#/$defs/profileVersionRef"
+          },
+          "runId": {
+            "$ref": "#/$defs/runId"
+          },
+          "snapshotContentDigest": {
+            "$ref": "#/$defs/runSnapshotContentDigest"
+          },
+          "invocationId": {
+            "$ref": "#/$defs/invocationId"
+          },
+          "eventId": {
+            "$ref": "#/$defs/eventRef"
+          },
+          "idempotencyKey": {
+            "$ref": "#/$defs/idempotencyKey"
+          },
+          "correlationId": {
+            "$ref": "#/$defs/correlationId"
+          },
+          "causationRef": {
+            "$ref": "#/$defs/causationRef"
+          },
+          "sequence": {
+            "$ref": "#/$defs/nonNegativeInteger"
+          },
+          "fingerprint": {
+            "$ref": "#/$defs/contentDigest"
+          },
+          "kind": {
+            "enum": [
+              "progress_observed",
+              "conversation_publication_observed",
+              "input_request_observed",
+              "artifact_observed",
+              "usage_observed",
+              "outcome_submission_observed",
+              "failure_observed",
+              "blocker_observed",
+              "cancellation_observed",
+              "transcript_evidence_observed"
+            ]
+          },
+          "productBinding": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/durableConversationBinding"
+              },
+              {
+                "$ref": "#/$defs/durableInputRequestBinding"
+              },
+              {
+                "$ref": "#/$defs/durableArtifactBinding"
+              },
+              {
+                "$ref": "#/$defs/durableOutcomeSubmissionBinding"
+              },
+              {
+                "$ref": "#/$defs/durableFailureBinding"
+              },
+              {
+                "$ref": "#/$defs/durableBlockerBinding"
+              },
+              {
+                "$ref": "#/$defs/durableCancellationBinding"
+              }
+            ]
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "enum": ["progress_observed", "usage_observed", "transcript_evidence_observed"]
+              }
+            },
+            "not": {
+              "required": ["productBinding"]
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "conversation_publication_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableConversationBinding"
+              }
+            },
+            "required": ["productBinding"]
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "input_request_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableInputRequestBinding"
+              }
+            },
+            "required": ["productBinding"]
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "artifact_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableArtifactBinding"
+              }
+            },
+            "required": ["productBinding"]
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "outcome_submission_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableOutcomeSubmissionBinding"
+              }
+            },
+            "required": ["productBinding"]
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "failure_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableFailureBinding"
+              }
+            },
+            "required": ["productBinding"]
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "blocker_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableBlockerBinding"
+              }
+            },
+            "required": ["productBinding"]
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "cancellation_observed"
+              },
+              "productBinding": {
+                "$ref": "#/$defs/durableCancellationBinding"
+              }
+            },
+            "required": ["productBinding"]
+          }
+        ]
+      }
+    },
+    "acceptedHumanInputAnswers": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "answerEventRef",
+          "inputRequestRef",
+          "responderPrincipal",
+          "workspaceRef",
+          "runId",
+          "authorizationReceiptRef",
+          "applicationServiceRef",
+          "gatewayReceiptRef",
+          "receiptRef",
+          "auditReceiptRef",
+          "correlationId",
+          "causationRef",
+          "payloadDigest",
+          "answerFactDigest"
+        ],
+        "properties": {
+          "answerEventRef": {
+            "$ref": "#/$defs/eventRef"
+          },
+          "inputRequestRef": {
+            "$ref": "#/$defs/inputRequestRef"
+          },
+          "responderPrincipal": {
+            "$ref": "#/$defs/trustedHumanAnswerResponderPrincipal"
+          },
+          "workspaceRef": {
+            "$ref": "#/$defs/workspaceRef"
+          },
+          "runId": {
+            "$ref": "#/$defs/runId"
+          },
+          "authorizationReceiptRef": {
+            "$ref": "#/$defs/authorizationReceiptRef"
+          },
+          "applicationServiceRef": {
+            "$ref": "#/$defs/applicationServiceRef"
+          },
+          "gatewayReceiptRef": {
+            "$ref": "#/$defs/gatewayReceiptRef"
+          },
+          "receiptRef": {
+            "$ref": "#/$defs/receiptRef"
+          },
+          "auditReceiptRef": {
+            "$ref": "#/$defs/auditReceiptRef"
+          },
+          "correlationId": {
+            "$ref": "#/$defs/correlationId"
+          },
+          "causationRef": {
+            "$ref": "#/$defs/causationRef"
+          },
+          "payloadDigest": {
+            "$ref": "#/$defs/contentDigest"
+          },
+          "answerFactDigest": {
+            "$ref": "#/$defs/contentDigest"
+          }
+        }
+      }
+    },
+    "acceptedExits": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workspaceRef",
+          "actorRef",
+          "profileVersionRef",
+          "runId",
+          "snapshotContentDigest",
+          "invocationId",
+          "idempotencyKey",
+          "finalSequence",
+          "fingerprint",
+          "kind"
+        ],
+        "properties": {
+          "workspaceRef": {
+            "$ref": "#/$defs/workspaceRef"
+          },
+          "actorRef": {
+            "$ref": "#/$defs/actorRef"
+          },
+          "profileVersionRef": {
+            "$ref": "#/$defs/profileVersionRef"
+          },
+          "runId": {
+            "$ref": "#/$defs/runId"
+          },
+          "snapshotContentDigest": {
+            "$ref": "#/$defs/runSnapshotContentDigest"
+          },
+          "invocationId": {
+            "$ref": "#/$defs/invocationId"
+          },
+          "idempotencyKey": {
+            "$ref": "#/$defs/idempotencyKey"
+          },
+          "finalSequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fingerprint": {
+            "$ref": "#/$defs/contentDigest"
+          },
+          "kind": {
+            "enum": ["completed", "waiting_for_input", "failed", "blocked", "cancelled"]
+          },
+          "inputEventId": {
+            "$ref": "#/$defs/eventRef"
+          },
+          "terminalEventId": {
+            "$ref": "#/$defs/eventRef"
+          }
+        }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "invocationId", "correlationId", "causationRef", "productBinding"],
+      "properties": {
+        "eventId": {
+          "$ref": "#/$defs/eventRef"
+        },
+        "invocationId": {
+          "$ref": "#/$defs/invocationId"
+        },
+        "correlationId": {
+          "$ref": "#/$defs/correlationId"
+        },
+        "causationRef": {
+          "$ref": "#/$defs/causationRef"
+        },
+        "productBinding": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/durableOutcomeSubmissionBinding"
+            },
+            {
+              "$ref": "#/$defs/durableFailureBinding"
+            },
+            {
+              "$ref": "#/$defs/durableBlockerBinding"
+            },
+            {
+              "$ref": "#/$defs/durableCancellationBinding"
+            }
+          ]
+        }
+      }
+    },
+    "pendingInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "invocationId",
+        "correlationId",
+        "causationRef",
+        "inputRequestRef",
+        "productEventRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "questionDigest"
+      ],
+      "properties": {
+        "eventId": {
+          "$ref": "#/$defs/eventRef"
+        },
+        "invocationId": {
+          "$ref": "#/$defs/invocationId"
+        },
+        "correlationId": {
+          "$ref": "#/$defs/correlationId"
+        },
+        "causationRef": {
+          "$ref": "#/$defs/causationRef"
+        },
+        "inputRequestRef": {
+          "$ref": "#/$defs/inputRequestRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "questionDigest": {
+          "$ref": "#/$defs/contentDigest"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "state": {
+              "const": "queued"
+            },
+            "revision": {
+              "const": 0
+            },
+            "lastAcceptedSequence": {
+              "const": 0
+            },
+            "acceptedEvents": {
+              "maxItems": 0
+            },
+            "acceptedHumanInputAnswers": {
+              "maxItems": 0
+            },
+            "acceptedExits": {
+              "maxItems": 0
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": ["previousRevision"]
+              },
+              {
+                "required": ["previousStateDigest"]
+              },
+              {
+                "required": ["terminal"]
+              },
+              {
+                "required": ["pendingInput"]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "revision": {
+              "minimum": 1
+            }
+          },
+          "required": ["previousRevision", "previousStateDigest"]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "state": {
+              "enum": ["queued", "running"]
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": ["terminal"]
+              },
+              {
+                "required": ["pendingInput"]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "state": {
+              "const": "waiting_for_input"
+            }
+          },
+          "required": ["pendingInput"],
+          "not": {
+            "required": ["terminal"]
+          }
+        },
+        {
+          "properties": {
+            "state": {
+              "enum": ["succeeded", "failed", "blocked", "cancelled"]
+            }
+          },
+          "required": ["terminal"],
+          "not": {
+            "required": ["pendingInput"]
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "actorRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "applicationServiceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^application-service:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "artifactRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^artifact:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "auditReceiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^audit-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "authorizationReceiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^authorization-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "cancellationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^cancellation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "causationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "contentDigest": {
+      "type": "string",
+      "minLength": 72,
+      "maxLength": 72,
+      "x-utf8ByteMax": 72,
+      "pattern": "^content:[a-f0-9]{64}$"
+    },
+    "conversationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^conversation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "durableArtifactBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "artifact"
+            },
+            "productRef": {
+              "$ref": "#/$defs/artifactRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "artifact"
+            },
+            "productRef": {
+              "$ref": "#/$defs/artifactRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
+    "durableBlockerBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_blocker"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "durableCancellationBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef",
+        "cancellationRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_cancellation"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "cancellationRef": {
+          "$ref": "#/$defs/cancellationRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "durableConversationBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "conversation"
+            },
+            "productRef": {
+              "$ref": "#/$defs/conversationRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "conversation"
+            },
+            "productRef": {
+              "$ref": "#/$defs/conversationRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
+    "durableFailureBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_failure"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "durableInputRequestBinding": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "input_request"
+            },
+            "productRef": {
+              "$ref": "#/$defs/inputRequestRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "input_request"
+            },
+            "productRef": {
+              "$ref": "#/$defs/inputRequestRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
+    "durableOutcomeSubmissionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "outcome_submission"
+        },
+        "productRef": {
+          "$ref": "#/$defs/outcomeSubmissionRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      }
+    },
+    "eventRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "gatewayReceiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^gateway-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "inputRequestRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^input-request:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "invocationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "operationAttemptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^operation-attempt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "operationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^operation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "outcomeSubmissionRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^outcome-submission:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "productEventRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^product-event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "profileVersionRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^profile-version:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "receiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "runSnapshotContentDigest": {
+      "type": "string",
+      "minLength": 73,
+      "maxLength": 73,
+      "x-utf8ByteMax": 73,
+      "pattern": "^snapshot:[a-f0-9]{64}$"
+    },
+    "trustedHumanAnswerResponderPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "planePrincipalId"],
+      "properties": {
+        "kind": {
+          "enum": ["human_user", "external_integration"]
+        },
+        "planePrincipalId": {
+          "$ref": "#/$defs/actorRef"
+        }
+      }
+    },
+    "workspaceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    }
+  }
+}

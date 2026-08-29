@@ -1,3 +1,18 @@
+x-local-agent-runtime-app-env: &local-agent-runtime-app-env
+  DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-plane.settings.local}
+  PLANE_AGENT_RUNTIME_ENABLED: ${PLANE_AGENT_RUNTIME_ENABLED:-0}
+  PLANE_AGENT_RUNTIME_URL: ${PLANE_AGENT_RUNTIME_URL:-http://agent-runtime:8080}
+  PLANE_AGENT_RUNTIME_HOST_URL: ${PLANE_AGENT_RUNTIME_HOST_URL:-http://api:8091}
+  PLANE_AGENT_RUNTIME_HOST_BIND: ${PLANE_AGENT_RUNTIME_HOST_BIND:-0.0.0.0}
+  PLANE_AGENT_RUNTIME_HOST_PORT: ${PLANE_AGENT_RUNTIME_HOST_PORT:-8091}
+  PLANE_AGENT_RUNTIME_DISPATCH_PATH: ${PLANE_AGENT_RUNTIME_DISPATCH_PATH:-/v1/runtime/dispatch}
+  PLANE_AGENT_RUNTIME_SECRET_FILE: /run/secrets/plane_agent_runtime
+  PLANE_AGENT_RUNTIME_LEDGER_PATH: ${PLANE_AGENT_RUNTIME_LEDGER_PATH:-/run/plane-agent-runtime/dispatch-ledger.sqlite}
+  PLANE_AGENT_RUNTIME_HEALTH_PATH: ${PLANE_AGENT_RUNTIME_HEALTH_PATH:-/health/ready}
+  PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE: ${PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE:-/run/plane-agent-runtime/safety-stop}
+  PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER: ${PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER:-}
+  PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE: ${PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE:-/run/plane-agent-credentials/revocations.json}
+
 services:
   plane-redis:
     image: valkey/valkey:7.2.11-alpine
@@ -72,11 +87,19 @@ services:
     restart: unless-stopped
     networks:
       - dev_env
+      - agent_runtime_internal
     volumes:
       - ./apps/api:/code
+      - agent_runtime_credential_state:/run/plane-agent-credentials
     command: ./bin/docker-entrypoint-api-local.sh
     env_file:
       - ./apps/api/.env
+    environment:
+      <<: *local-agent-runtime-app-env
+    secrets:
+      - plane_agent_runtime
+    expose:
+      - "8091"
     depends_on:
       - plane-db
       - plane-redis
@@ -93,11 +116,20 @@ services:
     restart: unless-stopped
     networks:
       - dev_env
+      - agent_runtime_internal
     volumes:
       - ./apps/api:/code
+      - agent_runtime_credential_state:/run/plane-agent-credentials
     command: ./bin/docker-entrypoint-worker.sh
     env_file:
       - ./apps/api/.env
+    environment:
+      <<: *local-agent-runtime-app-env
+      PLANE_AGENT_RUNTIME_HOST_URL: ${PLANE_AGENT_RUNTIME_WORKER_HOST_URL:-http://worker:8091}
+    secrets:
+      - plane_agent_runtime
+    expose:
+      - "8091"
     depends_on:
       - api
       - plane-db
@@ -117,10 +149,24 @@ services:
     command: ./bin/docker-entrypoint-beat.sh
     env_file:
       - ./apps/api/.env
+    environment:
+      <<: *local-agent-runtime-app-env
+    secrets:
+      - plane_agent_runtime
     depends_on:
       - api
       - plane-db
       - plane-redis
+
+  agent-runtime:
+    extends:
+      file: ./deployments/cli/community/docker-compose.yml
+      service: agent-runtime
+    profiles:
+      - agent
+    restart: unless-stopped
+    environment:
+      PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER: ${PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER:-}
 
   migrator:
     build:
@@ -136,16 +182,51 @@ services:
     command: ./bin/docker-entrypoint-migrator.sh --settings=plane.settings.local
     env_file:
       - ./apps/api/.env
+    environment:
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-plane.settings.local}
+      PLANE_DB_MIGRATION_MODE: "1"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@${POSTGRES_HOST:-plane-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-plane}
+      DATABASE_MIGRATION_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@${POSTGRES_HOST:-plane-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-plane}
+      DATABASE_RUNTIME_URL: ""
+      DATABASE_PROVISIONER_URL: ""
+      PLANE_AUDIT_MIGRATION_PASSWORD: ""
     depends_on:
       - plane-db
       - plane-redis
+
+  proxy:
+    image: caddy:2.11.3-alpine
+    restart: unless-stopped
+    networks:
+      - dev_env
+    env_file:
+      - .env
+    environment:
+      BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+      SITE_ADDRESS: ":80"
+    volumes:
+      - ./apps/proxy/Caddyfile.ce:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - plane-minio
+    ports:
+      - "8080:80"
 
 volumes:
   redisdata:
   uploads:
   pgdata:
   rabbitmq_data:
+  agent_runtime_credential_state:
 
 networks:
   dev_env:
     driver: bridge
+  agent_runtime_internal:
+    internal: true
+  agent_runtime_egress:
+    driver: bridge
+
+secrets:
+  plane_agent_runtime:
+    file: .plane-agent-runtime.secret
