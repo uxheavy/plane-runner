@@ -88,6 +88,21 @@ test("requires an owner for a new workspace", () => {
 
   files.CODEOWNERS = "packages/example/src/ @owner\n";
   assert.deepEqual(evaluate([{ status: "A", path }], files).map((error) => error.rule), ["RP005"]);
+
+  files.CODEOWNERS = "packages/example/\n";
+  assert.deepEqual(evaluate([{ status: "A", path }], files).map((error) => error.rule), ["RP005"]);
+
+  files.CODEOWNERS = "packages/example/ @owner\n";
+  assert.deepEqual(
+    evaluate([{ status: "R", oldPath: "package.json", path }], files),
+    [],
+  );
+
+  files.CODEOWNERS = "packages/ui/ @owner\n";
+  assert.deepEqual(
+    evaluate([{ status: "R", oldPath: "package.json", path }], files).map((error) => error.rule),
+    ["RP005"],
+  );
 });
 
 test("reads staged policy inputs from the index", () => {

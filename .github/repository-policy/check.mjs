@@ -89,13 +89,15 @@ function manifestViolations(path, manifest) {
 
 function workspaceOwnerMissing(path, codeowners) {
   const workspace = path.split("/").slice(0, 2).join("/");
-  const patterns = codeowners
+  const rules = codeowners
     .split("\n")
-    .map((line) => line.trim().split(/\s+/)[0])
-    .filter((pattern) => pattern && !pattern.startsWith("#"))
-    .map((pattern) => pattern.replace(/^\//, ""));
-  return !patterns.some((pattern) =>
-    [`${workspace}/`, `${workspace}/*`, `${workspace}/**`, `${workspace}/package.json`].includes(pattern),
+    .map((line) => line.trim().split(/\s+/))
+    .filter(([pattern]) => pattern && !pattern.startsWith("#"));
+  return !rules.some(
+    ([pattern, ...owners]) =>
+      [`${workspace}/`, `${workspace}/*`, `${workspace}/**`, `${workspace}/package.json`].includes(
+        pattern.replace(/^\//, ""),
+      ) && owners.some((owner) => owner.startsWith("@") || owner.includes("@")),
   );
 }
 
@@ -138,7 +140,7 @@ export function evaluatePolicy({
       const raw = readFile(change.path);
       if (raw !== null) errors.push(...manifestViolations(change.path, JSON.parse(raw)));
 
-      if (change.status === "A" && workspaceOwnerMissing(change.path, codeowners)) {
+      if (added && workspaceOwnerMissing(change.path, codeowners)) {
         errors.push(violation("RP005", change.path, "new workspace must have an explicit CODEOWNERS entry"));
       }
     }
