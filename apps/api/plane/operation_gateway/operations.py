@@ -139,6 +139,25 @@ def _plane_ref(value: Any, prefix: str, field_name: str) -> str:
     return raw
 
 
+def _require_creator_or_project_admin(
+    instance: Any,
+    request: Any,
+    workspace: Workspace,
+    project_id: str,
+) -> None:
+    if instance.created_by_id == request.user.id:
+        return
+    if ProjectMember.objects.filter(
+        workspace_id=workspace.id,
+        project_id=project_id,
+        member_id=request.user.id,
+        role=20,
+        is_active=True,
+    ).exists():
+        return
+    raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+
+
 def _bound_actor(request: Any, workspace: Workspace, value: Any, *, role: str | None = None) -> AgentActor:
     ref = value if isinstance(value, str) else ""
     if getattr(request, "agent_actor_ref", None) != ref:
@@ -605,6 +624,8 @@ class ResourceOperation:
             return 201, self._serialize(serializer.instance, data), publication
         if self.action == "update":
             instance = self._instance(workspace, data)
+            if self.spec.prefix == "comment":
+                _require_creator_or_project_admin(instance, request, workspace, data["project_id"])
             current_instance = self._serialize(instance, data)
             drop_fields = {
                 "project_id",
@@ -742,6 +763,8 @@ class ResourceOperation:
 
     def _delete(self, request: Any, workspace: Workspace, data: dict[str, Any]):
         instance = self._instance(workspace, data)
+        if self.spec.prefix == "comment":
+            _require_creator_or_project_admin(instance, request, workspace, data["project_id"])
         current_instance = self._serialize(instance, data)
         prefix = self.spec.prefix
         if prefix == "state":
@@ -1679,7 +1702,11 @@ class NativeBreadthOperation:
                 raise OperationAdapterFailure("VALIDATION_ERROR", 400) from None
             issue = (
                 Issue.issue_objects.filter(
-                    workspace_id=workspace.id, project__identifier__iexact=identifier, sequence_id=sequence_id
+                    workspace_id=workspace.id,
+                    project__identifier__iexact=identifier,
+                    project__project_projectmember__member_id=request.user.id,
+                    project__project_projectmember__is_active=True,
+                    sequence_id=sequence_id,
                 )
                 .select_related("project", "workspace", "state")
                 .first()
@@ -1702,8 +1729,12 @@ class NativeBreadthOperation:
                 )
                 valid = set(
                     str(value)
-                    for value in WorkspaceMember.objects.filter(
-                        workspace_id=workspace.id, member_id__in=[data.get(add_key), data.get(remove_key)]
+                    for value in ProjectMember.objects.filter(
+                        workspace_id=workspace.id,
+                        project_id=data["project_id"],
+                        member_id__in=[data.get(add_key), data.get(remove_key)],
+                        role__gte=15,
+                        is_active=True,
                     ).values_list("member_id", flat=True)
                 )
             else:
@@ -1762,6 +1793,8 @@ class NativeBreadthOperation:
                 ).first()
             if issue is None:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 404)
+            if data["archive"] and issue.state.group not in {"completed", "cancelled"}:
+                raise OperationAdapterFailure("VALIDATION_ERROR", 400)
             issue.archived_at = timezone.localdate() if data["archive"] else None
             self._save(issue, request.user.id, "archived_at")
             return 200, {"work_item": IssueSerializer(issue).data}, None
@@ -1786,10 +1819,21 @@ class NativeBreadthOperation:
         raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
 
     def _execute_estimate(self, request: Any, workspace: Workspace, data: dict[str, Any]):
-        project = Project.objects.filter(id=data["project_id"], workspace_id=workspace.id).first()
+        project = Project.objects.select_related("estimate").filter(
+            id=data["project_id"], workspace_id=workspace.id
+        ).first()
         if project is None:
             raise OperationAdapterFailure("OPERATION_REJECTED", 404)
-        estimate = Estimate.objects.filter(project_id=project.id, workspace_id=workspace.id).first()
+        estimate = project.estimate
+        if self.action in {
+            "project.estimate.points.list",
+            "project.estimate.points.create",
+            "project.estimate.point.update",
+            "project.estimate.point.delete",
+        }:
+            estimate = Estimate.objects.filter(
+                id=data["estimate_id"], project_id=project.id, workspace_id=workspace.id
+            ).first()
         if self.action == "project.estimate.retrieve":
             if estimate is None:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 404)
@@ -1808,7 +1852,7 @@ class NativeBreadthOperation:
                 updated_by_id=request.user.id,
             )
             return 201, {"estimate": EstimateSerializer(estimate).data}, None
-        if estimate is None and self.action not in {"project.estimate.create"}:
+        if estimate is None and self.action not in {"project.estimate.create", "project.estimate.link"}:
             raise OperationAdapterFailure("OPERATION_REJECTED", 404)
         if self.action == "project.estimate.update":
             for field in ("name", "description"):
@@ -1820,7 +1864,9 @@ class NativeBreadthOperation:
             self._soft_delete(estimate, request.user.id)
             return 204, {"deleted": True}, None
         if self.action == "project.estimate.link":
-            linked = Estimate.objects.filter(id=data["estimate_id"], workspace_id=workspace.id).first()
+            linked = Estimate.objects.filter(
+                id=data["estimate_id"], project_id=project.id, workspace_id=workspace.id
+            ).first()
             if linked is None:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 404)
             project.estimate = linked
@@ -1909,9 +1955,10 @@ class IntakeOperation:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 400)
             return 200, IntakeIssueSerializer(item).data, None
         if self.action == "update":
-            item = self._queryset(workspace, data).filter(pk=data["work_item_id"]).first()
+            item = self._queryset(workspace, data).filter(issue_id=data["issue_id"]).first()
             if item is None:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+            _require_creator_or_project_admin(item, request, workspace, data["project_id"])
             body = _serializer_data(
                 data,
                 drop={"project_id", "issue_id", "cursor", "per_page", "order_by", "fields", "expand", "params"},
@@ -1991,20 +2038,10 @@ class IntakeOperation:
             item = self._queryset(workspace, data).filter(issue_id=data["issue_id"]).select_related("issue").first()
             if item is None:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+            _require_creator_or_project_admin(item, request, workspace, data["project_id"])
             issue = item.issue
             issue_publication = None
             if item.status in {-2, -1, 0, 2}:
-                if (
-                    issue.created_by_id != request.user.id
-                    and not ProjectMember.objects.filter(
-                        workspace_id=workspace.id,
-                        project_id=data["project_id"],
-                        member_id=request.user.id,
-                        role=20,
-                        is_active=True,
-                    ).exists()
-                ):
-                    raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
                 current = json.loads(json.dumps(IssueSerializer(issue).data))
                 issue.delete()
                 issue_publication = issue_publication_payload(

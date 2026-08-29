@@ -23,7 +23,11 @@ from rest_framework.test import APIClient
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     APIToken,
+    Estimate,
+    Intake,
+    IntakeIssue,
     Issue,
+    IssueAssignee,
     IssueComment,
     IssueActivity,
     IssueSubscriber,
@@ -426,13 +430,51 @@ def test_native_breadth_adapters_preserve_public_semantics_and_receipts(
     execute("module.archive", "breadth-module-archive", {"module_id": module_id, "archive": True})
     execute("module.archive", "breadth-module-unarchive", {"module_id": module_id, "archive": False})
 
+    model_webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://project-hooks.example.com/plane",
+        module=True,
+        created_by=create_user,
+    )
     features = execute(
         "project.features.update",
         "breadth-project-features",
         {"modules": True, "cycles": True, "views": False},
     )["result"]["project"]
     assert features["module_view"] is True
+    feature_record = OperationGatewayIdempotency.objects.get(idempotency_key="breadth-project-features")
+    feature_publication = create_publication_intents(
+        feature_record,
+        {
+            "model_activity": {
+                "model_name": "module",
+                "model_id": module_id,
+                "requested_data": {"name": "Module Updated"},
+                "current_instance": json.dumps({"name": "Breadth Module"}),
+                "actor_id": str(create_user.id),
+                "slug": workspace.slug,
+                "origin": "https://plane.example.com",
+                "deleted": False,
+            }
+        },
+    )[0]
+    assert feature_publication.target_id == model_webhook.id
+    assert feature_publication.kind == OperationGatewayPublication.Kind.WEBHOOK
+    with patch(
+        "plane.operation_gateway.publications.deliver_webhook_target",
+        return_value=WebhookDeliveryResult("succeeded", False, response_status=202),
+    ) as deliver:
+        dispatch_publication_once(str(feature_publication.id))
+    assert deliver.call_args.kwargs["event"] == "module"
+    feature_publication.refresh_from_db()
+    assert feature_publication.state == OperationGatewayPublication.State.SUCCEEDED
 
+    Estimate.objects.create(
+        project=gateway_project,
+        workspace=workspace,
+        name="Unlinked Estimate",
+        type="points",
+    )
     estimate = execute(
         "project.estimate.create",
         "breadth-estimate-create",
@@ -496,6 +538,23 @@ def test_native_breadth_adapters_preserve_public_semantics_and_receipts(
     archived_page = execute("work_item.archive.list", "breadth-archive-list")
     assert archived_page["result"]["work_items"]["results"] == []
 
+    unfinished = api_key_client.post(
+        "/api/v1/operations/",
+        family_body(
+            workspace,
+            "work_item.archive",
+            "breadth-work-item-archive-unfinished",
+            {
+                "project_id": str(gateway_project.id),
+                "work_item_id": str(gateway_issue.id),
+                "archive": True,
+            },
+        ),
+        format="json",
+    )
+    assert unfinished.status_code == status.HTTP_400_BAD_REQUEST
+    gateway_issue.state.group = "completed"
+    gateway_issue.state.save(update_fields=["group"])
     execute(
         "work_item.archive",
         "breadth-work-item-archive",
@@ -535,6 +594,100 @@ def test_direct_family_adapter_denies_non_member_without_resource_lookup(workspa
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert not IssueComment.objects.filter(comment_html="<p>must not write</p>").exists()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_gateway_preserves_object_and_project_mutation_boundaries(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    member = User.objects.create(email="gateway-member@plane.so", username="gateway-member")
+    WorkspaceMember.objects.create(workspace=workspace, member=member, role=15)
+    ProjectMember.objects.create(project=gateway_project, member=member, role=15)
+    member_client = client_for_user(member)
+    comment = IssueComment.objects.create(
+        workspace=workspace,
+        project=gateway_project,
+        issue=gateway_issue,
+        actor=create_user,
+        comment_html="<p>owner only</p>",
+        created_by=create_user,
+    )
+    intake = Intake.objects.create(
+        workspace=workspace,
+        project=gateway_project,
+        name="Gateway Intake",
+        created_by=create_user,
+    )
+    intake_issue = IntakeIssue.objects.create(
+        workspace=workspace,
+        project=gateway_project,
+        intake=intake,
+        issue=gateway_issue,
+        created_by=create_user,
+    )
+    gateway_project.intake_view = True
+    gateway_project.save(update_fields=["intake_view"])
+
+    def deny(operation_id, key, input_data):
+        response = member_client.post(
+            "/api/v1/operations/",
+            family_body(
+                workspace,
+                operation_id,
+                key,
+                {"project_id": str(gateway_project.id), **input_data},
+            ),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    deny(
+        "comment.update",
+        "boundary-comment-update",
+        {"issue_id": str(gateway_issue.id), "comment_id": str(comment.id), "comment_html": "<p>changed</p>"},
+    )
+    deny(
+        "comment.delete",
+        "boundary-comment-delete",
+        {"issue_id": str(gateway_issue.id), "comment_id": str(comment.id)},
+    )
+    deny("intake.update", "boundary-intake-update", {"issue_id": str(gateway_issue.id), "status": 0})
+    deny("intake.delete", "boundary-intake-delete", {"issue_id": str(gateway_issue.id)})
+    assert IssueComment.objects.filter(pk=comment.id, comment_html="<p>owner only</p>").exists()
+    assert IntakeIssue.objects.filter(pk=intake_issue.id, status=-2).exists()
+
+    outsider = User.objects.create(email="gateway-outsider@plane.so", username="gateway-outsider")
+    WorkspaceMember.objects.create(workspace=workspace, member=outsider, role=15)
+    identifier = f"{gateway_project.identifier}-{gateway_issue.sequence_id}"
+    hidden = client_for_user(outsider).post(
+        "/api/v1/operations/",
+        family_body(
+            workspace,
+            "work_item.identifier.retrieve",
+            "boundary-private-identifier",
+            {"work_item_identifier": identifier},
+        ),
+        format="json",
+    )
+    assert hidden.status_code == status.HTTP_404_NOT_FOUND
+
+    assignee = api_key_client.post(
+        "/api/v1/operations/",
+        family_body(
+            workspace,
+            "work_item.assignee.manage",
+            "boundary-project-assignee",
+            {
+                "project_id": str(gateway_project.id),
+                "work_item_id": str(gateway_issue.id),
+                "add_user_id": str(outsider.id),
+            },
+        ),
+        format="json",
+    )
+    assert assignee.status_code == status.HTTP_200_OK
+    assert not IssueAssignee.objects.filter(issue=gateway_issue, assignee=outsider).exists()
 
 
 @pytest.mark.contract
