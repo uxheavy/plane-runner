@@ -53,7 +53,7 @@ Preserve the first failure. Distinguish provider attempt state, runtime exit sta
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` binds the current and previous service artifacts. The rollback is forward-only: keep migration `0146`, retain `0145` as the compatibility floor, switch all service pins together, reconcile from durable effect/audit/outcome state, and never replay an ambiguous mutation.
 
 The API, worker, gateway, and runtime image source revision is
-`29bd537ffa14c9c272ee1279b9a3ee186d1784c1`. The verifier receipt records that
+`150d5b6d85c8da81d641c84a2d47909364816044`. The verifier receipt records that
 runtime source separately from the clean checkout `HEAD` that executes the
 verification. The accepted G3 rollback baseline is
 `7c9d35f4c324865c27c84da5016be2c84e460bcc`. The drill validates these manifest
