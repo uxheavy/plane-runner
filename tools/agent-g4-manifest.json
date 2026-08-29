@@ -1,7 +1,7 @@
 {
   "manifestVersion": "plane-agent-g4/provider-free-v1",
   "sourceBinding": {
-    "runtimeSourceCandidate": "a66cf8f52c59c7ac492ff76706846e04fc983eb1",
+    "runtimeSourceCandidate": "67b58ba954ab3fddb6b7e7197d12607de02b4020",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
     "acceptedG3HermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb"
   },
@@ -26,16 +26,16 @@
   "pins": {
     "apiArtifact": {
       "contract": "plane.operation/v1",
-      "imageDigest": "sha256:3c902c565c021e90136708db022f567aa83aea9fe5de6ab51c26c39d815a2190",
-      "imageTag": "plane-agent-api:g4-v146-a66cf8f52c",
-      "sourceRevision": "a66cf8f52c59c7ac492ff76706846e04fc983eb1"
+      "imageDigest": "sha256:55eb723a4ec7a5698ca802a9509a04beb06a3e1e77e7876f5e2a0e2a1f79c11b",
+      "imageTag": "plane-agent-api:g4-v146-67b58ba954",
+      "sourceRevision": "67b58ba954ab3fddb6b7e7197d12607de02b4020"
     },
     "hermesCommit": "df166ad411654c3cae67e2dc079ea60e6c91f85e",
     "mcpGitlink": "d65df7c94bcd41a3c7795c40c1227e2199889d71",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:155ddda6ce8964557229191ddfd4e2640ef2fd1390b8905688fab82b1e95510f",
-    "runtimeImageRevision": "a66cf8f52c59c7ac492ff76706846e04fc983eb1",
-    "runtimeImageTag": "plane-agent-runtime:hermes-df166ad4-v147-a66cf8f5",
+    "runtimeImageDigest": "sha256:77f66330f60da4cf58f9d798f037f0e51a53c374ed3d5b2c3c26632281297916",
+    "runtimeImageRevision": "67b58ba954ab3fddb6b7e7197d12607de02b4020",
+    "runtimeImageTag": "plane-agent-runtime:hermes-df166ad4-v147-67b58ba9",
     "sdkGitlink": "4403116b3601a29d7a2c507c8bef1db768574142"
   },
   "offlineEvidence": {
@@ -46,7 +46,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "d673cb7b132bcf88c58373de726c7732c3d325be7de1193d9c20964aa3b13ca1",
+      "sha256": "eaa467fd14e9534e2c659a625840493dddee3823674bd9e5bdbf04a51b5e4511",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
