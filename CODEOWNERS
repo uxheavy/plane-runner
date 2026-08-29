@@ -10,5 +10,5 @@ deployments/        @mguptahub
 /.github/pull_request_template.md @sriramveeraghanta
 /.github/repository-policy-exceptions.json @sriramveeraghanta @dheeru0198
 /.github/workflows/repository-policy.yml @sriramveeraghanta @dheeru0198
-/scripts/check-repository-policy.mjs @sriramveeraghanta @dheeru0198
-/scripts/check-repository-policy.test.mjs @sriramveeraghanta @dheeru0198
+/.github/repository-policy/check.mjs @sriramveeraghanta @dheeru0198
+/.github/repository-policy/check.test.mjs @sriramveeraghanta @dheeru0198

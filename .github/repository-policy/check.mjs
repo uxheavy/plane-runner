@@ -67,6 +67,8 @@ function hasExactException(exceptions, path, baseBlob, now) {
       typeof entry.approvedBy === "string" &&
       entry.approvedBy.trim().length > 0 &&
       typeof entry.expires === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(entry.expires) &&
+      new Date(`${entry.expires}T00:00:00Z`).toISOString().slice(0, 10) === entry.expires &&
       entry.expires >= now.toISOString().slice(0, 10),
   );
 }
@@ -87,11 +89,14 @@ function manifestViolations(path, manifest) {
 
 function workspaceOwnerMissing(path, codeowners) {
   const workspace = path.split("/").slice(0, 2).join("/");
-  return !codeowners
+  const patterns = codeowners
     .split("\n")
     .map((line) => line.trim().split(/\s+/)[0])
     .filter((pattern) => pattern && !pattern.startsWith("#"))
-    .some((pattern) => pattern.replace(/^\//, "").startsWith(`${workspace}/`));
+    .map((pattern) => pattern.replace(/^\//, ""));
+  return !patterns.some((pattern) =>
+    [`${workspace}/`, `${workspace}/*`, `${workspace}/**`, `${workspace}/package.json`].includes(pattern),
+  );
 }
 
 export function evaluatePolicy({
@@ -146,6 +151,14 @@ function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
 
+export function readIndexFile(path, run = execFileSync) {
+  try {
+    return run("git", ["show", `:${path}`], { encoding: "utf8" });
+  } catch {
+    return null;
+  }
+}
+
 function main(argv) {
   const staged = argv.includes("--staged");
   const baseIndex = argv.indexOf("--base");
@@ -156,7 +169,9 @@ function main(argv) {
     ? ["diff", "--cached", "--name-status", "-z", "--find-renames"]
     : ["diff", "--name-status", "-z", "--find-renames", `${base}...HEAD`];
   const changes = parseNameStatus(execFileSync("git", diffArgs, { encoding: "utf8" }));
-  const readFile = (path) => (existsSync(path) ? readFileSync(path, "utf8") : null);
+  const readFile = staged
+    ? (path) => readIndexFile(path)
+    : (path) => (existsSync(path) ? readFileSync(path, "utf8") : null);
   const baseHasPath = (path) => {
     if (staged) {
       try {

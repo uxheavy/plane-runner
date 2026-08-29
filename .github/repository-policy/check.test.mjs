@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 
-import { evaluatePolicy, parseNameStatus } from "./check.mjs";
+import { evaluatePolicy, parseNameStatus, readIndexFile } from "./check.mjs";
 
 function evaluate(changes, files = {}, existing = new Set()) {
   return evaluatePolicy({
@@ -52,6 +52,23 @@ test("accepts an exact unexpired migration exception", () => {
   assert.deepEqual(evaluate([{ status: "M", path }], files), []);
 });
 
+test("rejects malformed migration exception dates", () => {
+  const path = "apps/api/plane/db/migrations/0001_initial.py";
+  const files = {
+    ".github/repository-policy-exceptions.json": JSON.stringify([
+      {
+        rule: "RP003",
+        path,
+        baseBlob: "a".repeat(40),
+        reason: "Repair an invalid historical migration",
+        approvedBy: "@api-owner",
+        expires: "not-a-date",
+      },
+    ]),
+  };
+  assert.deepEqual(evaluate([{ status: "M", path }], files).map((error) => error.rule), ["RP003"]);
+});
+
 test("enforces internal dependency protocol and ownership for new workspaces", () => {
   const path = "packages/example/package.json";
   const files = {
@@ -68,4 +85,17 @@ test("requires an owner for a new workspace", () => {
   const path = "packages/example/package.json";
   const files = { [path]: "{}", CODEOWNERS: "packages/ui/ @owner\n" };
   assert.deepEqual(evaluate([{ status: "A", path }], files).map((error) => error.rule), ["RP005"]);
+
+  files.CODEOWNERS = "packages/example/src/ @owner\n";
+  assert.deepEqual(evaluate([{ status: "A", path }], files).map((error) => error.rule), ["RP005"]);
+});
+
+test("reads staged policy inputs from the index", () => {
+  const calls = [];
+  const content = readIndexFile("CODEOWNERS", (...args) => {
+    calls.push(args);
+    return "staged owner\n";
+  });
+  assert.equal(content, "staged owner\n");
+  assert.deepEqual(calls[0].slice(0, 2), ["git", ["show", ":CODEOWNERS"]]);
 });
