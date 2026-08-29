@@ -347,9 +347,7 @@ def _model_publication_payload(
             "model_name": model_name,
             "model_id": str(model_id),
             "requested_data": requested_data,
-            "current_instance": None
-            if deleted
-            else (json.dumps(current_instance) if current_instance is not None else None),
+            "current_instance": json.dumps(current_instance) if current_instance is not None else None,
             "actor_id": str(request.user.id),
             "slug": workspace.slug,
             "origin": base_host(request=request, is_app=True),
@@ -1861,7 +1859,10 @@ class NativeBreadthOperation:
             self._save(estimate, request.user.id, "name", "description")
             return 200, {"estimate": EstimateSerializer(estimate).data}, None
         if self.action == "project.estimate.delete":
-            self._soft_delete(estimate, request.user.id)
+            with transaction.atomic():
+                project.estimate = None
+                self._save(project, request.user.id, "estimate")
+                self._soft_delete(estimate, request.user.id)
             return 204, {"deleted": True}, None
         if self.action == "project.estimate.link":
             linked = Estimate.objects.filter(

@@ -515,6 +515,9 @@ def test_native_breadth_adapters_preserve_public_semantics_and_receipts(
     )
     execute("project.estimate.update", "breadth-estimate-update", {"name": "Breadth Estimate Updated"})
     execute("project.estimate.delete", "breadth-estimate-delete")
+    gateway_project.refresh_from_db()
+    assert gateway_project.estimate_id is None
+    execute("project.estimate.create", "breadth-estimate-recreate", {"name": "Replacement Estimate"})
 
     identifier = f"{gateway_project.identifier}-{gateway_issue.sequence_id}"
     assert execute(
@@ -816,14 +819,14 @@ def test_webhook_intents_are_per_target_and_partial_success_is_independent(
         workspace,
         gateway_project,
         gateway_issue,
-        operation_id="work_item.rename",
+        operation_id="work_item.update",
         key="webhook-targets",
-        input_data={"name": "Targeted Rename"},
+        input_data={"name": "Targeted Rename", "priority": "high"},
     )
     with patch("plane.operation_gateway.publications.schedule_publications") as schedule:
         response = api_key_client.post("/api/v1/operations/", payload, format="json")
         schedule.assert_called_once()
-        assert len(schedule.call_args.args[0]) == 4
+        assert len(schedule.call_args.args[0]) == 6
 
     record = OperationGatewayIdempotency.objects.get(idempotency_key="webhook-targets")
     webhook_publications = list(
@@ -833,7 +836,8 @@ def test_webhook_intents_are_per_target_and_partial_success_is_independent(
         first_webhook.id,
         second_webhook.id,
     }
-    assert len({publication.publication_key for publication in webhook_publications}) == 2
+    assert len(webhook_publications) == 4
+    assert len({publication.publication_key for publication in webhook_publications}) == 4
 
     def result_for_target(**kwargs):
         if kwargs["webhook_id"] == str(first_webhook.id):
@@ -843,20 +847,73 @@ def test_webhook_intents_are_per_target_and_partial_success_is_independent(
     with patch("plane.operation_gateway.publications.deliver_webhook_target", side_effect=result_for_target) as deliver:
         for publication in webhook_publications:
             dispatch_publication_once(str(publication.id))
-        assert deliver.call_count == 2
+        assert deliver.call_count == 4
         assert {call.kwargs["delivery_key"] for call in deliver.call_args_list} == {
             publication.publication_key for publication in webhook_publications
         }
+        assert {call.kwargs["activity"]["field"] for call in deliver.call_args_list} == {"name", "priority"}
+        assert {call.kwargs["action"] for call in deliver.call_args_list} == {"updated"}
 
-    webhook_publications[0].refresh_from_db()
-    webhook_publications[1].refresh_from_db()
-    webhook_states = {publication.target_id: publication.state for publication in webhook_publications}
-    assert webhook_states[first_webhook.id] == OperationGatewayPublication.State.SUCCEEDED
-    assert webhook_states[second_webhook.id] == OperationGatewayPublication.State.FAILED
+    webhook_states = {}
+    for publication in webhook_publications:
+        publication.refresh_from_db()
+        webhook_states.setdefault(publication.target_id, set()).add(publication.state)
+    assert webhook_states[first_webhook.id] == {OperationGatewayPublication.State.SUCCEEDED}
+    assert webhook_states[second_webhook.id] == {OperationGatewayPublication.State.FAILED}
     for publication in record.publications.exclude(kind=OperationGatewayPublication.Kind.WEBHOOK):
         dispatch_publication_once(str(publication.id))
-    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 3
+    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 4
     assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_issue_webhook_actions_survive_create_delete_and_unsupported_models_are_suppressed(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-actions.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+
+    def execute(operation_id, key, input_data):
+        with patch("plane.operation_gateway.publications.schedule_publications"):
+            response = api_key_client.post(
+                "/api/v1/operations/",
+                family_body(workspace, operation_id, key, {"project_id": str(gateway_project.id), **input_data}),
+                format="json",
+            )
+        assert response.status_code == status.HTTP_200_OK
+        return response.json()["result"]
+
+    def deliver_for(key):
+        publication = OperationGatewayPublication.objects.get(
+            idempotency__idempotency_key=key,
+            kind=OperationGatewayPublication.Kind.WEBHOOK,
+        )
+        with patch(
+            "plane.operation_gateway.publications.deliver_webhook_target",
+            return_value=WebhookDeliveryResult("succeeded", False, response_status=202),
+        ) as deliver:
+            dispatch_publication_once(str(publication.id))
+        return deliver.call_args.kwargs
+
+    issue_id = execute("work_item.create", "webhook-action-create", {"name": "Webhook lifecycle"})[
+        "work_item"
+    ]["id"]
+    assert deliver_for("webhook-action-create")["action"] == "created"
+    execute("work_item.delete", "webhook-action-delete", {"issue_id": issue_id})
+    deleted = deliver_for("webhook-action-delete")
+    assert deleted["action"] == "deleted"
+    assert deleted["event_data"]["name"] == "Webhook lifecycle"
+
+    execute("label.create", "unsupported-label-webhook", {"name": "No unsupported webhook"})
+    assert not OperationGatewayPublication.objects.filter(
+        idempotency__idempotency_key="unsupported-label-webhook",
+        kind=OperationGatewayPublication.Kind.WEBHOOK,
+    ).exists()
 
 
 @pytest.mark.contract

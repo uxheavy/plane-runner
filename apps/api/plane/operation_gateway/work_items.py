@@ -54,6 +54,7 @@ def issue_publication_payload(
     )
     requested_json = json.dumps(requested_data, cls=DjangoJSONEncoder)
     actor_id = str(request.user.id)
+    action = event_type.rsplit(".", 1)[-1]
     changed = current_instance_data is None or any(
         current_instance_data.get(key) != value for key, value in requested_data.items()
     )
@@ -84,10 +85,12 @@ def issue_publication_payload(
             "model_name": "issue",
             "model_id": str(issue_id),
             "requested_data": requested_data,
-            "current_instance": current_instance or "{}",
+            "current_instance": current_instance,
             "actor_id": actor_id,
             "slug": workspace.slug,
             "origin": base_host(request=request, is_app=True),
+            "action": action,
+            "deleted": action == "deleted",
         },
     }
 

@@ -32,6 +32,18 @@ from .role_boundary import audited_gateway_boundary
 
 PUBLICATION_LEASE_SECONDS = 300
 ACTIVITY_NAMESPACE = uuid.UUID("cbf3b03a-6bc3-4b09-89f1-04f3ffdecd38")
+SUPPORTED_MODEL_WEBHOOK_EVENTS = {
+    "project",
+    "issue",
+    "cycle",
+    "module",
+    "cycle_issue",
+    "module_issue",
+    "issue_comment",
+    "intake_issue",
+}
+
+
 class PublicationDispatchFailure(Exception):
     """A publication could not be completed."""
 
@@ -62,6 +74,37 @@ def activity_id_for_publication(publication_key: str) -> str:
     """Return the deterministic Activity PK for one gateway activity intent."""
 
     return str(uuid.uuid5(ACTIVITY_NAMESPACE, publication_key))
+
+
+def _webhook_delivery_specs(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    model_payload = payload.get("model_activity")
+    source = model_payload if isinstance(model_payload, dict) else payload
+    if isinstance(model_payload, dict) and source.get("model_name") not in SUPPORTED_MODEL_WEBHOOK_EVENTS:
+        return []
+    try:
+        current = json.loads(source["current_instance"]) if source.get("current_instance") is not None else None
+        requested = source.get("requested_data") or {}
+        if not isinstance(requested, dict):
+            raise ValueError("Webhook requested data is not an object")
+    except (TypeError, ValueError) as error:
+        raise PublicationDispatchFailure(str(error), retryable=False) from error
+
+    action = source.get("action") or (
+        "deleted" if source.get("deleted") else ("created" if current is None else "updated")
+    )
+    changes = (
+        [(None, None, None)]
+        if action in {"created", "deleted"}
+        else [
+            (field, current.get(field), value)
+            for field, value in sorted(requested.items())
+            if field in current and current.get(field) != value
+        ]
+    )
+    return [
+        {"action": action, "field": field, "old_value": old_value, "new_value": new_value}
+        for field, old_value, new_value in changes
+    ]
 
 
 @audited_gateway_boundary
@@ -116,6 +159,9 @@ def create_publication_intents(
         raise PublicationDispatchFailure("Missing webhook publication payload", retryable=False)
     if webhook_payload.get("skip"):
         return publications
+    delivery_specs = _webhook_delivery_specs(webhook_payload)
+    if not delivery_specs:
+        return publications
 
     requested_webhook_id = webhook_payload.get("webhook_id")
     existing_target_ids = set(
@@ -149,19 +195,24 @@ def create_publication_intents(
         targets = targets.filter(pk=requested_webhook_id)
 
     for webhook in targets:
-        target_payload = {**webhook_payload, "webhook_id": str(webhook.id)}
-        publication_key = f"{record.id}:webhook:{webhook.id}"
-        publication, _ = OperationGatewayPublication.objects.get_or_create(
-            idempotency=record,
-            kind=OperationGatewayPublication.Kind.WEBHOOK,
-            target_id=webhook.id,
-            defaults={
-                "invocation_id": record.invocation_id,
-                "publication_key": publication_key,
-                "payload": target_payload,
-            },
-        )
-        publications.append(publication)
+        for index, delivery in enumerate(delivery_specs):
+            target_payload = {
+                **webhook_payload,
+                "webhook_id": str(webhook.id),
+                "delivery": delivery,
+            }
+            publication_key = f"{record.id}:webhook:{webhook.id}:{index}"
+            publication, _ = OperationGatewayPublication.objects.get_or_create(
+                publication_key=publication_key,
+                defaults={
+                    "idempotency": record,
+                    "kind": OperationGatewayPublication.Kind.WEBHOOK,
+                    "target_id": webhook.id,
+                    "invocation_id": record.invocation_id,
+                    "payload": target_payload,
+                },
+            )
+            publications.append(publication)
 
     return publications
 
@@ -474,62 +525,53 @@ def _prepare_webhooks(publication: OperationGatewayPublication) -> list[Prepared
     target_id = payload.get("webhook_id") or publication.target_id
     if not target_id:
         raise PublicationDispatchFailure("Webhook publication has no concrete target", retryable=False)
+    delivery = payload.get("delivery")
+    if not isinstance(delivery, dict):
+        raise PublicationDispatchFailure("Webhook publication has no durable delivery", retryable=False)
     model_payload = payload.get("model_activity")
     if isinstance(model_payload, dict):
         try:
             event = model_payload["model_name"]
             actor = get_model_data("user", model_payload["actor_id"])
-            event_data = (
-                {"id": model_payload["model_id"]}
-                if model_payload.get("deleted")
-                else get_model_data(event, model_payload["model_id"])
-            )
             current = (
                 json.loads(model_payload["current_instance"])
                 if model_payload.get("current_instance") is not None
                 else None
             )
-            requested = model_payload.get("requested_data") or {}
-            if not isinstance(requested, dict):
-                raise ValueError("Webhook requested data is not an object")
+            event_data = (
+                current
+                if delivery["action"] == "deleted"
+                else get_model_data(event, model_payload["model_id"])
+            )
         except ObjectDoesNotExist as error:
             raise PublicationDispatchFailure(str(error), retryable=False) from error
         except (KeyError, TypeError, ValueError) as error:
             raise PublicationDispatchFailure(str(error), retryable=False) from error
-        if model_payload.get("deleted") or current is None:
-            changes = [(None, None, None)]
-        else:
-            changes = [
-                (field, current.get(field), value)
-                for field, value in requested.items()
-                if field in current and current.get(field) != value
-            ]
-        action = "deleted" if model_payload.get("deleted") else ("created" if current is None else "updated")
         return [
             PreparedWebhookDelivery(
                 target_id=str(target_id),
                 slug=model_payload["slug"],
                 event=event,
-                action=action,
+                action=delivery["action"],
                 event_data=event_data,
                 activity={
-                    "field": field,
-                    "new_value": new_value,
-                    "old_value": old_value,
+                    "field": delivery.get("field"),
+                    "new_value": delivery.get("new_value"),
+                    "old_value": delivery.get("old_value"),
                     "actor": actor,
                     "old_identifier": None,
                     "new_identifier": None,
                 },
-                delivery_key=f"{publication.publication_key}:{index}",
+                delivery_key=publication.publication_key,
             )
-            for index, (field, old_value, new_value) in enumerate(changes)
         ]
     try:
-        current_instance = json.loads(payload["current_instance"])
-        requested_data = payload["requested_data"]
-        if not isinstance(requested_data, dict):
-            raise ValueError("Webhook requested data is not an object")
-        event_data = get_model_data("issue", payload["model_id"])
+        current_instance = json.loads(payload["current_instance"]) if payload.get("current_instance") else None
+        event_data = (
+            current_instance
+            if delivery["action"] == "deleted"
+            else get_model_data("issue", payload["model_id"])
+        )
         actor = get_model_data("user", payload["actor_id"])
     except ObjectDoesNotExist as error:
         raise PublicationDispatchFailure(str(error), retryable=False) from error
@@ -540,12 +582,12 @@ def _prepare_webhooks(publication: OperationGatewayPublication) -> list[Prepared
             target_id=str(target_id),
             slug=payload["slug"],
             event="issue",
-            action="updated",
+            action=delivery["action"],
             event_data=event_data,
             activity={
-                "field": "name",
-                "new_value": requested_data.get("name"),
-                "old_value": current_instance.get("name"),
+                "field": delivery.get("field"),
+                "new_value": delivery.get("new_value"),
+                "old_value": delivery.get("old_value"),
                 "actor": actor,
                 "old_identifier": None,
                 "new_identifier": None,

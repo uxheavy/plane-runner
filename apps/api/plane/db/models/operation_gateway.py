@@ -295,8 +295,8 @@ class OperationGatewayPublication(models.Model):
     )
     invocation_id = models.UUIDField(editable=False)
     kind = models.CharField(max_length=32, choices=Kind.choices)
-    # Non-null for a concrete webhook target. Activity and notification
-    # publications intentionally keep this null and are unique per kind.
+    # Non-null for a concrete webhook delivery target. Activity and
+    # notification publications keep this null and are unique per kind.
     target_id = models.UUIDField(null=True, blank=True, editable=False)
     publication_key = models.CharField(max_length=160, unique=True, editable=False)
     payload = models.JSONField(default=dict)
@@ -329,11 +329,6 @@ class OperationGatewayPublication(models.Model):
                 fields=("idempotency", "kind"),
                 condition=models.Q(target_id__isnull=True),
                 name="operation_gateway_publication_kind_without_target",
-            ),
-            models.UniqueConstraint(
-                fields=("idempotency", "kind", "target_id"),
-                condition=models.Q(target_id__isnull=False),
-                name="operation_gateway_publication_target",
             ),
         ]
         indexes = [
