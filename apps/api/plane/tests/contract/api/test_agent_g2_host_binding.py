@@ -761,28 +761,12 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
                 input_data=denied_input,
             ),
         )
-        denied_record = OperationGatewayIdempotency.objects.get(idempotency_key="idempotency:g2-search-bound-denied")
-        assert denied_record.request_input == denied_input
-        assert denied_record.caller_id == actor.principal_id
-        denied_audit = OperationGatewayAudit.objects.get(
-            request_id=denied_record.request_id,
-            phase=OperationGatewayAudit.Phase.OUTCOME,
-        )
-        assert denied_audit.result == {"targetDigest": hashlib.sha256(
-            json.dumps(denied_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()}
-        assert denied.status == "ok", denied
-        assert denied.output["result"]["ok"] is False
-        assert denied.output["result"]["error"]["code"] == "NOT_AUTHORIZED"
-        assert denied.output["result"]["targetDigest"] == denied.output["observations"][0]["targetDigest"]
-        assert denied.output["observations"][0]["status"] == "denied"
-        assert denied.output["observations"][0]["errorCode"] == "NOT_AUTHORIZED"
-        assert denied.output["observations"][0]["targetDigest"] == hashlib.sha256(
-            json.dumps(denied_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        denied_wire = json.dumps(denied.output, sort_keys=True, separators=(",", ":"))
-        assert str(other_project.id) not in denied_wire
-        assert str(other_issue.id) not in denied_wire
+        assert denied.status == "invalid"
+        assert denied.error_code == "CODE_MODE_FAILED"
+        assert denied.output == {"codeModeErrorClass": "callback_or_protocol"}
+        assert not OperationGatewayIdempotency.objects.filter(
+            idempotency_key="idempotency:g2-search-bound-denied"
+        ).exists()
     finally:
         server.close()
 
