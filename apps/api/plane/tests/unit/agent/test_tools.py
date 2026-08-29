@@ -279,13 +279,13 @@ def test_code_mode_child_preserves_bounded_callback_error_codes():
         CodeModeIsolateRunner().run(
             host,
             """
-                export default async function ({host}: {host: any}) {
+                export default async function ({host, input}: {host: any; input: any}) {
                     return await host.call_plane_operation(
-                        "work_item.read", {}, "idempotency:observation-limit", "correlation:observation-limit"
+                        "work_item.read", input, "idempotency:observation-limit", "correlation:observation-limit"
                     );
                 }
             """,
-            {},
+            {"preparedCallRef": "prepared-call:observation-limit"},
         )
 
     assert raised.value.code == "OBSERVATION_LIMIT"
