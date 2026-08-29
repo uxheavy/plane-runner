@@ -16,6 +16,7 @@ import signal
 import sys
 import threading
 import tempfile
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from http import HTTPStatus
@@ -24,6 +25,7 @@ from typing import Any, Callable
 
 from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
 from .contracts import (
+    RUNTIME_BUDGET_MAX_SECONDS,
     RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
     RuntimeDispatchError,
     runtime_budget_seconds,
@@ -45,6 +47,8 @@ from .subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport, _herme
 
 
 RUNTIME_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch/v1"
+_MAX_TARGETED_STOPS = 4096
+_TARGETED_STOP_TTL_SECONDS = RUNTIME_BUDGET_MAX_SECONDS + 60
 _MAX_DISPATCH_FIELDS = {
     "protocol",
     "requestDigest",
@@ -346,8 +350,7 @@ class RuntimeDispatchExecutor:
                             "destinationPath": audit.destination_path,
                             "requestId": audit.request_id,
                             "idempotencyKey": (
-                                "provider-attempt:"
-                                + hashlib.sha256(audit.request_id.encode("utf-8")).hexdigest()
+                                "provider-attempt:" + hashlib.sha256(audit.request_id.encode("utf-8")).hexdigest()
                             ),
                             "sequence": audit.sequence,
                             "upstreamInitiated": audit.upstream_called,
@@ -435,9 +438,7 @@ class RuntimeDispatchExecutor:
             raise dispatch_error
         return result_frames
 
-    def _configured_provider_route(
-        self, snapshot: Mapping[str, Any]
-    ) -> tuple[Any, str, str] | None:
+    def _configured_provider_route(self, snapshot: Mapping[str, Any]) -> tuple[Any, str, str] | None:
         policy = self.configuration.provider_policy
         if policy is None:
             return None
@@ -655,7 +656,8 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
         self.configuration = configuration
         self._dispatch_executor = executor
         self._stop_lock = threading.RLock()
-        self._targeted_stops: dict[str, tuple[str, str, str, dict[str, object]]] = {}
+        self._targeted_stops: dict[str, tuple[str, str, str, dict[str, object], float]] = {}
+        self._targeted_stop_invocations: set[str] = set()
 
     @property
     def dispatch_executor(self) -> RuntimeDispatchExecutor:
@@ -673,6 +675,9 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
         reason = _bounded_reason(body.get("reason"))
         idempotency_key = _bounded_reason(body.get("idempotencyKey"))
         with self._stop_lock:
+            now = time.monotonic()
+            self._targeted_stops = {key: record for key, record in self._targeted_stops.items() if record[4] > now}
+            self._targeted_stop_invocations = {record[1] for record in self._targeted_stops.values()}
             existing = self._targeted_stops.get(idempotency_key)
             if existing is not None:
                 if existing[:3] != (workspace_id, invocation_id, reason):
@@ -680,6 +685,8 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
                 result = dict(existing[3])
                 result["replayed"] = True
                 return HTTPStatus.OK, result
+            if len(self._targeted_stops) >= _MAX_TARGETED_STOPS:
+                raise RuntimeSafetyStopError("targeted safety-stop retention is full")
             snapshot = self.controller.health()
             result = snapshot.as_dict()
             result.update(
@@ -693,14 +700,21 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
                     "replayed": False,
                 }
             )
-            self._targeted_stops[idempotency_key] = (workspace_id, invocation_id, reason, result)
+            self._targeted_stops[idempotency_key] = (
+                workspace_id,
+                invocation_id,
+                reason,
+                result,
+                now + _TARGETED_STOP_TTL_SECONDS,
+            )
+            self._targeted_stop_invocations.add(invocation_id)
             return HTTPStatus.ACCEPTED, result
 
     def is_targeted_stop(self, invocation_id: object) -> bool:
         if not isinstance(invocation_id, str) or not invocation_id:
             return False
         with self._stop_lock:
-            return any(record[1] == invocation_id for record in self._targeted_stops.values())
+            return invocation_id in self._targeted_stop_invocations
 
 
 def run_runtime_service(environment: dict[str, str] | None = None) -> int:

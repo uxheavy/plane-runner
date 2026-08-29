@@ -196,19 +196,18 @@ def next_schedule_fire(expression: str, timezone_name: str, after: datetime) -> 
     zone = _get_zone(timezone_name)
     if after.tzinfo is None or after.utcoffset() is None:
         raise AgentScheduleError("Schedule calculations require an aware datetime")
-    candidate = after.astimezone(dt_timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1)
-    for _ in range(60 * 24 * 370):
-        local = candidate.astimezone(zone)
-        if (
-            local.minute in parsed.minutes
-            and local.hour in parsed.hours
-            and local.month in parsed.months
-            and _cron_day_matches(parsed, local)
-        ):
-            local_naive = local.replace(tzinfo=None)
-            if _resolve_local_minute(local_naive, zone) == candidate:
-                return candidate
-        candidate += timedelta(minutes=1)
+    after_utc = after.astimezone(dt_timezone.utc)
+    first_local_day = after_utc.astimezone(zone).date()
+    for day_offset in range(366 * 8 + 1):
+        local_day = first_local_day + timedelta(days=day_offset)
+        local_midnight = datetime.combine(local_day, datetime.min.time())
+        if local_day.month not in parsed.months or not _cron_day_matches(parsed, local_midnight):
+            continue
+        for hour in sorted(parsed.hours):
+            for minute in sorted(parsed.minutes):
+                candidate = _resolve_local_minute(local_midnight.replace(hour=hour, minute=minute), zone)
+                if candidate is not None and candidate > after_utc:
+                    return candidate
     raise AgentScheduleError("Cron expression has no fire within the supported horizon")
 
 

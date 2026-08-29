@@ -64,6 +64,10 @@ def test_g4_runtime_configuration_fails_closed_for_missing_invalid_and_placehold
         AgentRuntimeConfiguration.from_environment({"PLANE_AGENT_RUNTIME_SECRET": "r" * 40})
     with pytest.raises(RuntimeConfigurationError, match="absolute HTTP"):
         AgentRuntimeConfiguration.from_environment(_runtime_environment(PLANE_AGENT_RUNTIME_URL="agent-runtime:8080"))
+    with pytest.raises(RuntimeConfigurationError, match="must not contain a path"):
+        AgentRuntimeConfiguration.from_environment(
+            _runtime_environment(PLANE_AGENT_RUNTIME_URL="http://agent-runtime:8080/prefix")
+        )
     with pytest.raises(RuntimeConfigurationError, match="at least 32"):
         AgentRuntimeConfiguration.from_environment(_runtime_environment(PLANE_AGENT_RUNTIME_SECRET="too-short"))
     with pytest.raises(RuntimeConfigurationError):
@@ -162,9 +166,7 @@ def test_g4_deployment_credential_resolver_accepts_provider_neutral_chatgpt_sour
     (False, True),
     ids=("legacy-without-host-metadata", "current"),
 )
-def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
-    monkeypatch, tmp_path, document_shape
-):
+def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(monkeypatch, tmp_path, document_shape):
     now = runtime_credentials.datetime.fromisoformat("2026-08-07T10:12:00+00:00").timestamp()
     monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
     document = {
@@ -224,12 +226,8 @@ def test_g4_deployment_credential_resolver_rejects_nonfresh_codex_auth_document(
 
 
 def test_g4_codex_auth_document_refresh_gap_is_classified_without_leaking_values():
-    error = runtime_credentials.RuntimeCredentialError(
-        "deployment credential source requires trusted resolver refresh"
-    )
-    assert runtime_credentials.credential_failure_subreason(error) == (
-        "credential_source_requires_refresh"
-    )
+    error = runtime_credentials.RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
+    assert runtime_credentials.credential_failure_subreason(error) == ("credential_source_requires_refresh")
 
 
 @pytest.mark.parametrize(
@@ -248,24 +246,27 @@ def test_g4_codex_auth_document_rejects_unusable_jwt_lifetime(monkeypatch, tmp_p
     now = 1787063898
     monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
     source = tmp_path / "auth.json"
-    source.write_text(json.dumps({
-        "last_refresh": "2026-08-01T00:00:00Z",
-        "tokens": {
-            "access_token": access_token,
-            "account_id": "synthetic-account-id",
-            "id_token": "synthetic-id-token",
-            "refresh_token": "synthetic-refresh-token",
-        },
-    }), encoding="utf-8")
+    source.write_text(
+        json.dumps(
+            {
+                "last_refresh": "2026-08-01T00:00:00Z",
+                "tokens": {
+                    "access_token": access_token,
+                    "account_id": "synthetic-account-id",
+                    "id_token": "synthetic-id-token",
+                    "refresh_token": "synthetic-refresh-token",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
     with pytest.raises(
         runtime_credentials.RuntimeCredentialError,
         match="requires trusted resolver refresh",
     ) as error:
         runtime_credentials.resolve_deployment_credential("runtime")
-    assert runtime_credentials.credential_failure_subreason(error.value) == (
-        "credential_source_requires_refresh"
-    )
+    assert runtime_credentials.credential_failure_subreason(error.value) == ("credential_source_requires_refresh")
 
 
 @pytest.mark.parametrize(
@@ -405,10 +406,13 @@ def test_g4_remote_runtime_secret_file_selects_remote_and_missing_secret_cannot_
     settings = runtime_settings_from_environment(environment)
 
     assert settings["PLANE_AGENT_RUNTIME_SHARED_SECRET"] == "f" * 40
-    assert runtime_transport_kind(
-        settings["PLANE_AGENT_RUNTIME_URL"],
-        settings["PLANE_AGENT_RUNTIME_SHARED_SECRET"],
-    ) == "remote"
+    assert (
+        runtime_transport_kind(
+            settings["PLANE_AGENT_RUNTIME_URL"],
+            settings["PLANE_AGENT_RUNTIME_SHARED_SECRET"],
+        )
+        == "remote"
+    )
     with pytest.raises(RuntimeConfigurationError, match="configured together"):
         runtime_transport_kind("http://agent-runtime:8080", "")
     with pytest.raises(RuntimeConfigurationError, match="configured together"):
@@ -630,9 +634,7 @@ def test_provider_relay_configuration_and_public_lease_metadata_are_parent_only(
         clock=lambda: now[0],
         state_file=tmp_path / "revocations.json",
     )
-    lease, credentials = broker.issue(
-        agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-1"
-    )
+    lease, credentials = broker.issue(agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-1")
     metadata = lease.public_metadata()
     assert "parent-only-provider-secret" not in json.dumps(metadata)
     assert "credentialDigest" not in metadata
@@ -773,9 +775,7 @@ def test_g4_runtime_policy_rejects_wrong_provider_wire_or_model_before_dispatch(
         )
         executor = object.__new__(RuntimeDispatchExecutor)
         executor.configuration = configuration
-        executor._configured_provider_route(
-            {"runtimePolicy": {"model": {"provider": "openai-codex", "model": model}}}
-        )
+        executor._configured_provider_route({"runtimePolicy": {"model": {"provider": "openai-codex", "model": model}}})
 
 
 def test_g4_runtime_process_and_code_mode_policies_are_finite_and_networkless():
@@ -820,6 +820,19 @@ def test_g4_runtime_http_health_and_safety_stop_boundary(tmp_path):
         with urllib.request.urlopen(request, timeout=2) as response:
             assert response.status == 202
             assert json.loads(response.read())["status"] == "accepted"
+        assert server.is_targeted_stop("invocation:test") is True
+        record = server._targeted_stops["stop:test"]
+        server._targeted_stops["stop:test"] = (*record[:4], 0.0)
+        server.request_targeted_stop(
+            {
+                "workspaceId": "workspace:test",
+                "invocationId": "invocation:next",
+                "reason": "next stop",
+                "idempotencyKey": "stop:next",
+            }
+        )
+        assert server.is_targeted_stop("invocation:test") is False
+        assert server.is_targeted_stop("invocation:next") is True
         with urllib.request.urlopen(f"{url}/health/ready", timeout=2) as response:
             assert response.status == 200
             health = json.loads(response.read())

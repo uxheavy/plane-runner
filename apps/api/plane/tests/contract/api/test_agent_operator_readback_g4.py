@@ -56,6 +56,20 @@ def test_operator_health_api_cli_parity_and_explicit_runtime_authority_boundary(
 
 @pytest.mark.contract
 @pytest.mark.django_db
+def test_operator_health_does_not_expose_runtime_exception_text(api_key_client, workspace, monkeypatch):
+    def failed_health(**_kwargs):
+        raise RuntimeError("secret deployment path /srv/private/runtime")
+
+    monkeypatch.setattr(runtime, "operator_health_readback", failed_health, raising=False)
+    response = api_key_client.get(_url(workspace, "health/"), {"limit": 1})
+
+    assert response.status_code == 200
+    assert response.json()["health"]["runtime"]["reason"] == "The runtime operator adapter failed."
+    assert "/srv/private/runtime" not in response.content.decode("utf-8")
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
 def test_operator_readback_has_stable_pagination_and_correlation_gaps(
     api_key_client,
     workspace,

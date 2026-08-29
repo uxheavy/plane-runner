@@ -382,6 +382,7 @@ CELERY_IMPORTS = (
     "plane.bgtasks.issue_description_version_sync",
     # Durable Plane Operation Gateway publication intents
     "plane.operation_gateway.tasks",
+    "plane.agent.schedules.tasks",
 )
 
 FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))

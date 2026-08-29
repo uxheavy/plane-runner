@@ -10,6 +10,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections
 
+from plane.celery import app as celery_app
 from plane.agent.lifecycle import (
     InvalidTransitionError,
     RecoveryIntentRequiredError,
@@ -150,9 +151,10 @@ def test_context_projection_keeps_agent_memory_and_subject_user_preferences_sepa
     allowed = assemble_agent_context(actor, subject_user=user, authorization=AllowSubject())
     assert parse_memory_markdown(allowed.memory_markdown)[0].entry_ref == f"memory-entry:{memory.id}"
     assert parse_memory_markdown(allowed.user_markdown)[0].entry_ref == f"memory-entry:{preference.id}"
-    assert reproject_memory_markdown(
-        parse_memory_markdown(allowed.memory_markdown), "MEMORY.md"
-    ) == allowed.memory_markdown
+    assert (
+        reproject_memory_markdown(parse_memory_markdown(allowed.memory_markdown), "MEMORY.md")
+        == allowed.memory_markdown
+    )
     assert reproject_memory_markdown(parse_memory_markdown(allowed.user_markdown), "USER.md") == allowed.user_markdown
     assert "Use direct language." not in allowed.memory_markdown
     assert (
@@ -740,6 +742,17 @@ def test_standard_cron_weekday_dom_dow_and_dst_semantics():
     )
     assert fall_back_first == datetime(2026, 11, 1, 8, 30, tzinfo=timezone.utc)
     assert fall_back_after_first == datetime(2026, 11, 2, 9, 30, tzinfo=timezone.utc)
+    assert next_schedule_fire(
+        "0 0 29 2 *",
+        "UTC",
+        datetime(2025, 3, 1, 0, 0, tzinfo=timezone.utc),
+    ) == datetime(2028, 2, 29, 0, 0, tzinfo=timezone.utc)
+
+
+def test_agent_schedule_dispatcher_is_registered_with_celery_beat():
+    assert celery_app.conf.beat_schedule["fire-due-agent-schedules"]["task"] == (
+        "plane.agent.schedules.tasks.fire_due_agent_schedules"
+    )
 
 
 @pytest.mark.django_db(transaction=True)

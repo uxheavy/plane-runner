@@ -12,6 +12,7 @@ Covers the credential-hygiene guarantees of the external API request logger:
 
 import hashlib
 import hmac
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -21,6 +22,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 
 from plane.middleware.logger import APITokenLogMiddleware
+from plane.db.models import APIActivityLog
 
 
 @pytest.fixture
@@ -83,6 +85,7 @@ class TestAPITokenLogMiddleware:
             "/api/v1/workspaces/acme/agent-admin/runs/run/input-events/",
             "/api/v1/workspaces/acme/agent-admin/runs/run/outcome/",
             "/api/v1/workspaces/acme/agent-runtime/runs/run/",
+            "/api/v1/operations/",
         ],
     )
     def test_agent_routes_queue_metadata_only(self, middleware, request_factory, path):
@@ -106,6 +109,8 @@ class TestAPITokenLogMiddleware:
         assert response_secret not in serialized
         assert self.API_KEY not in serialized
         assert "headers" not in log_data
-        assert log_data["request_body"]["bytes"] == len(request_secret.encode())
-        assert log_data["response_body"]["bytes"] == len(response_secret.encode())
-        assert log_data["request_id"] == "request-canary-id"
+        assert json.loads(log_data["body"])["bytes"] == len(request_secret.encode())
+        assert json.loads(log_data["response_body"])["bytes"] == len(response_secret.encode())
+        assert json.loads(log_data["query_params"])["requestId"] == "request-canary-id"
+        model_fields = {field.name for field in APIActivityLog._meta.fields}
+        assert set(log_data) <= model_fields

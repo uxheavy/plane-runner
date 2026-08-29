@@ -53,7 +53,9 @@ def _receipt() -> dict[str, object]:
 
 
 def _write_receipt(path: Path, value: dict[str, object]) -> None:
-    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    path.write_text(
+        json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
 
 
 def _verifier_revision() -> str:
@@ -63,7 +65,9 @@ def _verifier_revision() -> str:
     ).strip()
 
 
-def test_canonical_receipt_proves_operations_external_client_and_denial(tmp_path: Path) -> None:
+def test_canonical_receipt_proves_operations_external_client_and_denial(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "receipt.json"
     _write_receipt(path, _receipt())
 
@@ -73,24 +77,41 @@ def test_canonical_receipt_proves_operations_external_client_and_denial(tmp_path
     assert all(row["status"] == "pass" for row in result["checks"])
     assert result["externalClientProof"]["passed"] is True
     assert result["zeroProductEffectsOnDenial"]["proved"] is True
-    assert result["runtimeSourceCandidate"] == _binding()["sourceBinding"]["runtimeSourceCandidate"]
+    assert (
+        result["runtimeSourceCandidate"]
+        == _binding()["sourceBinding"]["runtimeSourceCandidate"]
+    )
     assert result["verifierRevision"] == _verifier_revision()
     assert result["finalVerifierEvidence"]["verifierRevision"] == _verifier_revision()
 
 
-@pytest.mark.parametrize("mutation,error", [
-    (lambda value: value.update(providerExecutionInvoked=True), "not_passed_provider_free"),
-    (lambda value: value.update(runtimeSourceCandidate="0" * 40), "runtime_source_binding_mismatch"),
-    (lambda value: value.update(verifierRevision="0" * 40), "verifier_revision_mismatch"),
-    (
-        lambda value: value.update(
-            stageResults=[
-                row for row in value["stageResults"] if row["stage"] != "g4-rollback"
-            ]
+@pytest.mark.parametrize(
+    "mutation,error",
+    [
+        (
+            lambda value: value.update(providerExecutionInvoked=True),
+            "not_passed_provider_free",
         ),
-        "canonical_stage_evidence_missing",
-    ),
-])
+        (
+            lambda value: value.update(runtimeSourceCandidate="0" * 40),
+            "runtime_source_binding_mismatch",
+        ),
+        (
+            lambda value: value.update(verifierRevision="0" * 40),
+            "verifier_revision_mismatch",
+        ),
+        (
+            lambda value: value.update(
+                stageResults=[
+                    row
+                    for row in value["stageResults"]
+                    if row["stage"] != "g4-rollback"
+                ]
+            ),
+            "canonical_stage_evidence_missing",
+        ),
+    ],
+)
 def test_receipt_rejects_missing_provider_free_proof(
     tmp_path: Path,
     mutation,
@@ -105,14 +126,18 @@ def test_receipt_rejects_missing_provider_free_proof(
         operations.validate_evidence(path, verifier_revision=_verifier_revision())
 
 
-def test_receipt_rejects_verifier_revision_equal_to_runtime_source(tmp_path: Path) -> None:
+def test_receipt_rejects_verifier_revision_equal_to_runtime_source(
+    tmp_path: Path,
+) -> None:
     value = _receipt()
     runtime_source = value["runtimeSourceCandidate"]
     value["verifierRevision"] = runtime_source
     path = tmp_path / "receipt.json"
     _write_receipt(path, value)
 
-    with pytest.raises(operations.OperationsEvidenceError, match="identity_not_distinct"):
+    with pytest.raises(
+        operations.OperationsEvidenceError, match="identity_not_distinct"
+    ):
         operations.validate_evidence(path, verifier_revision=runtime_source)
 
 
@@ -127,7 +152,9 @@ def test_rollback_binding_rejects_manifest_fixture_drift(tmp_path: Path) -> None
         rollback.validate_bindings(fixture_path=path)
 
 
-def test_rollback_binding_rejects_previous_api_contract_mutation(tmp_path: Path) -> None:
+def test_rollback_binding_rejects_previous_api_contract_mutation(
+    tmp_path: Path,
+) -> None:
     fixture = json.loads(rollback.FIXTURE_PATH.read_text(encoding="utf-8"))
     fixture["previous"]["apiArtifact"]["contract"] = "broken.contract/v0"
     path = tmp_path / "rollback.json"
@@ -137,10 +164,13 @@ def test_rollback_binding_rejects_previous_api_contract_mutation(tmp_path: Path)
         rollback.validate_bindings(fixture_path=path)
 
 
-def test_proof_workflow_watches_rollback_drill() -> None:
-    workflow = (TOOLS.parent / ".github/workflows/agent-runtime-proof.yml").read_text(encoding="utf-8")
+def test_proof_workflow_watches_rollback_inputs() -> None:
+    workflow = (TOOLS.parent / ".github/workflows/agent-runtime-proof.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert '- "tools/agent-g4-rollback-drill.py"' in workflow
+    assert '- "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"' in workflow
 
 
 def test_verifiers_resolve_external_modules_to_an_absolute_path() -> None:
@@ -153,4 +183,6 @@ def test_verifiers_resolve_external_modules_to_an_absolute_path() -> None:
 def test_g4_verifier_runs_the_current_host_rollback_drill() -> None:
     verifier = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
 
-    assert '"${TOOLING_PYTHON}" "${ROOT_DIR}/tools/agent-g4-rollback-drill.py"' in verifier
+    assert (
+        '"${TOOLING_PYTHON}" "${ROOT_DIR}/tools/agent-g4-rollback-drill.py"' in verifier
+    )

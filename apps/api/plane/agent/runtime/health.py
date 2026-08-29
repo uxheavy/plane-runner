@@ -230,7 +230,7 @@ def _operator_credentials() -> tuple[str, str] | None:
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
         return None
-    if parsed.query or parsed.fragment:
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         return None
     return url.rstrip("/"), secret
 

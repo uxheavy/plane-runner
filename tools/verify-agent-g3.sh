@@ -353,7 +353,7 @@ CREATED_RUNTIME_LOG_DIR=1
 COMMUNITY_COMPOSE_CONFIG="${RUNTIME_LOG_DIR}/community-compose.json"
 CURRENT_STEP="resolve-community-compose"
 env CORS_ALLOWED_ORIGINS=http://localhost LIVE_SERVER_SECRET_KEY=compose-test-key SECRET_KEY=compose-test-key \
-    docker compose -f "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" config --format json \
+    docker compose --profile agent -f "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" config --format json \
     > "${COMMUNITY_COMPOSE_CONFIG}" \
     || fail "resolved community Compose configuration" "docker compose config failed" "inspect the pinned community deployment"
 [[ -s "${COMMUNITY_COMPOSE_CONFIG}" ]] || fail "resolved community Compose configuration" "empty config" "inspect the community deployment source"

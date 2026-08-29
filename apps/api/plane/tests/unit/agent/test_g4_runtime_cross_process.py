@@ -37,6 +37,7 @@ from plane.agent.runtime import (
     request_operator_safety_stop,
 )
 from plane.agent.runtime import credentials as runtime_credentials
+from plane.agent.runtime.credentials import RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS
 from plane.agent.runtime.provider_egress import ProviderResponse
 from plane.agent.runtime.remote import _structured_rejection
 from plane.agent.runtime.service import RUNTIME_DISPATCH_PROTOCOL, RuntimeDispatchExecutor, _RuntimeHTTPServer
@@ -75,9 +76,7 @@ from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRunti
         (b"opaque token-value", 2, "Unknown", "unknown", "unknown"),
     ),
 )
-def test_child_failure_classifier_retains_only_finite_metadata(
-    stderr, returncode, exception_class, module, category
-):
+def test_child_failure_classifier_retains_only_finite_metadata(stderr, returncode, exception_class, module, category):
     diagnostic = _classify_child_failure(stderr, returncode)
 
     assert diagnostic == {
@@ -795,7 +794,7 @@ def test_g4_provider_dispatch_reissues_invocation_relay_and_lease(tmp_path, monk
     assert state_file.exists()
     state = json.loads(state_file.read_text(encoding="utf-8"))
     assert secret not in json.dumps(state, sort_keys=True)
-    assert state["revokedLeases"] == issued_lease_ids
+    assert set(state["revokedLeases"]) == set(issued_lease_ids)
     assert len(relay_paths) == 2
     assert len({str(path) for path in relay_paths}) == 2
     assert len(relay_tokens) == 2
@@ -848,7 +847,7 @@ def test_g4_remote_dispatch_preserves_success_after_expired_lease_cleanup(tmp_pa
     assert transport.dispatch(snapshot_json, invocation_json) == ('{"status":"completed"}',)
     assert len(issued_lease_ids) == 1
     persisted = json.loads(state_file.read_text(encoding="utf-8"))
-    assert persisted["revokedLeases"] == issued_lease_ids
+    assert set(persisted["revokedLeases"]) == set(issued_lease_ids)
     with pytest.raises(RuntimeCredentialError, match="revoked"):
         broker.resolve(
             issued_lease_ids[0],
@@ -856,6 +855,16 @@ def test_g4_remote_dispatch_preserves_success_after_expired_lease_cleanup(tmp_pa
             invocation_ref="invocation:expired-cleanup",
         )
     assert broker.revoke_lease_id(issued_lease_ids[0]) is False
+
+    now[0] += RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS + 1
+    next_lease, _ = broker.issue(
+        agent_ref="agent:expired-cleanup",
+        credential_ref="runtime",
+        invocation_ref="invocation:next",
+    )
+    broker.revoke(next_lease.lease_id)
+    compacted = json.loads(state_file.read_text(encoding="utf-8"))
+    assert set(compacted["revokedLeases"]) == {next_lease.lease_id}
 
 
 def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path):
@@ -909,7 +918,7 @@ def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path)
             shared_secret=configuration.shared_secret,
         ).dispatch(snapshot_json, invocation_json)
         observed = json.loads(frames[0])
-        expected_process_probe = 'denied' if observed['architecture'] == 'x86_64' else 'unsupported'
+        expected_process_probe = "denied" if observed["architecture"] == "x86_64" else "unsupported"
         assert observed == {
             "architecture": observed["architecture"],
             "bootstrapChildAllowed": True,
@@ -1339,7 +1348,7 @@ def test_g4_targeted_stop_cancels_only_the_named_active_invocation(tmp_path, mon
         "        time.sleep(0.01)\n"
         "else:\n"
         "    time.sleep(0.5)\n"
-        "print('{\"protocol\":\"fixture\",\"credential\":\"not-emitted\"}')\n"
+        'print(\'{"protocol":"fixture","credential":"not-emitted"}\')\n'
     )
     configuration = AgentRuntimeConfiguration.from_environment(_runtime_environment(tmp_path, fixture))
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")

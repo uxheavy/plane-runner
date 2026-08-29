@@ -231,9 +231,7 @@ def _validate_credential_resolver(value: object) -> str:
         return ""
     raw = _bounded_text(value, "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", 512)
     if not raw.startswith("command:"):
-        raise RuntimeConfigurationError(
-            "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER must use command:/absolute/path"
-        )
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER must use command:/absolute/path")
     executable = raw.removeprefix("command:")
     if not executable.startswith("/") or any(char.isspace() for char in executable):
         raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER executable is invalid")
@@ -335,8 +333,8 @@ def _validate_runtime_url(value: object) -> str:
         raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must be an absolute HTTP(S) URL")
     if parsed.username is not None or parsed.password is not None:
         raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must not contain credentials")
-    if parsed.query or parsed.fragment:
-        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must not contain a query or fragment")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must not contain a path, query, or fragment")
     return raw.rstrip("/")
 
 

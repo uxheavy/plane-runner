@@ -122,12 +122,12 @@ def _runtime_health(*, workspace_id: str, limit: int) -> dict[str, Any]:
             "code": "RUNTIME_OPERATOR_ADAPTER_UNAVAILABLE",
             "external_required": ["runtime-owned health/safety-stop adapter"],
         }
-    except Exception as exc:
+    except Exception:
         return {
             "status": "dependency_failure",
             "ready": False,
             "code": "RUNTIME_OPERATOR_ADAPTER_FAILED",
-            "reason": _safe_text(exc),
+            "reason": "The runtime operator adapter failed.",
         }
 
 
@@ -662,18 +662,18 @@ def build_safety_stop_command(
             reason=_safe_text(reason, max_bytes=MAX_REASON_BYTES),
             idempotency_key=idempotency_key,
         )
-    except RuntimeOperatorAdapterUnavailable as exc:
+    except RuntimeOperatorAdapterUnavailable:
         runtime_result = {
             "status": "external_required",
             "code": "RUNTIME_OPERATOR_ADAPTER_UNAVAILABLE",
-            "message": _safe_text(exc),
+            "message": "The runtime operator adapter is unavailable.",
             "external_required": ["runtime-owned safety-stop hook"],
         }
-    except Exception as exc:
+    except Exception:
         runtime_result = {
             "status": "dependency_failure",
             "code": "RUNTIME_OPERATOR_ADAPTER_FAILED",
-            "message": _safe_text(exc),
+            "message": "The runtime operator adapter failed.",
         }
     if not isinstance(runtime_result, Mapping):
         runtime_result = {

@@ -5,6 +5,7 @@
 # Python imports
 import hashlib
 import hmac
+import json
 import logging
 import re
 import time
@@ -96,7 +97,12 @@ class APITokenLogMiddleware:
     @staticmethod
     def _is_agent_route(request):
         path = request.path_info or request.path
-        return "/agent-admin/" in path or "/agent-runtime/" in path or "/agent_runtime/" in path
+        return (
+            "/agent-admin/" in path
+            or "/agent-runtime/" in path
+            or "/agent_runtime/" in path
+            or path == "/api/v1/operations/"
+        )
 
     @staticmethod
     def _digest_metadata(content):
@@ -159,21 +165,23 @@ class APITokenLogMiddleware:
             if self._is_agent_route(request):
                 path = request.path_info or request.path
                 workspace_match = re.search(r"/workspaces/([^/]+)/agent-(?:admin|runtime)(?:/|$)", path)
+                metadata = {
+                    "durationMs": duration_ms,
+                    "requestId": self._safe_request_id(request),
+                    "userId": str(getattr(getattr(request, "user", None), "id", "")) or None,
+                    "workspaceSlug": workspace_match.group(1) if workspace_match else None,
+                    "query": self._digest_metadata(request.META.get("QUERY_STRING", "").encode("utf-8")),
+                }
                 log_data = {
                     "token_identifier": hmac.new(
                         settings.SECRET_KEY.encode(), api_key.encode(), hashlib.sha256
                     ).hexdigest(),
                     "path": path,
                     "method": request.method,
-                    "status_code": response.status_code,
                     "response_code": response.status_code,
-                    "duration_ms": duration_ms,
-                    "workspace_slug": workspace_match.group(1) if workspace_match else None,
-                    "request_id": self._safe_request_id(request),
-                    "user_id": getattr(getattr(request, "user", None), "id", None),
-                    "request_body": self._digest_metadata(request_body),
-                    "response_body": self._digest_metadata(response.content),
-                    "query_params": self._digest_metadata(request.META.get("QUERY_STRING", "").encode("utf-8")),
+                    "body": json.dumps(self._digest_metadata(request_body), sort_keys=True),
+                    "response_body": json.dumps(self._digest_metadata(response.content), sort_keys=True),
+                    "query_params": json.dumps(metadata, sort_keys=True),
                 }
             else:
                 log_data = {

@@ -51,28 +51,31 @@ try {
 }
 
 let callbackSequence = 0;
+const pendingCallbacks = new Map();
+lines.on("line", (line) => {
+  let frame;
+  try {
+    frame = JSON.parse(line);
+  } catch {
+    frame = null;
+  }
+  const pending = frame?.type === "callback_result" ? pendingCallbacks.get(frame.id) : undefined;
+  if (!pending) {
+    const error = new Error("callback response is not bound to a request");
+    error.codeModeErrorClass = "callback_or_protocol";
+    for (const { reject } of pendingCallbacks.values()) reject(error);
+    pendingCallbacks.clear();
+    return;
+  }
+  pendingCallbacks.delete(frame.id);
+  pending.resolve(frame.receipt);
+});
+
 const callback = (kind, name, args) => {
   const id = `callback:${++callbackSequence}`;
-  write({ type: "callback", id, kind, name, args });
   return new Promise((resolve, reject) => {
-    const onLine = (line) => {
-      try {
-        const frame = JSON.parse(line);
-        if (frame?.type !== "callback_result" || frame.id !== id) {
-          const error = new Error("callback response is not bound to the request");
-          error.codeModeErrorClass = "callback_or_protocol";
-          reject(error);
-          return;
-        }
-        lines.removeListener("line", onLine);
-        resolve(frame.receipt);
-      } catch {
-        const error = new Error("callback response is not valid JSON");
-        error.codeModeErrorClass = "callback_or_protocol";
-        reject(error);
-      }
-    };
-    lines.on("line", onLine);
+    pendingCallbacks.set(id, { resolve, reject });
+    write({ type: "callback", id, kind, name, args });
   });
 };
 
@@ -133,7 +136,10 @@ const preparedCallRefFromWorkItemReadCall = (value) => {
 };
 
 const normalizeOperationInput = (operationId, input) => {
-  if (operationId !== "work_item.read" || !hasExactKeys(input, ["preparedCallRef"])) return input;
+  if (operationId !== "work_item.read") return input;
+  if (!hasExactKeys(input, ["preparedCallRef"])) {
+    throw new Error("prepared work-item read call is invalid");
+  }
   return { preparedCallRef: preparedCallRefFromWorkItemReadCall(input.preparedCallRef) };
 };
 

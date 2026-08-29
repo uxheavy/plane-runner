@@ -117,6 +117,24 @@ def test_code_mode_extracts_exact_work_item_read_call_before_callback():
     ]
 
 
+def test_code_mode_routes_concurrent_callback_replies_to_matching_waiters():
+    frames = _run(
+        """
+        export default async function ({host}) {
+          return await Promise.all([
+            host.call_plane_operation("search_workspace", {query: "one"}, "i1", "c1"),
+            host.call_plane_operation("search_workspace", {query: "two"}, "i2", "c2")
+          ]);
+        }
+        """
+    )
+    assert [frame["type"] for frame in frames] == ["callback", "callback", "result"]
+    assert frames[-1]["value"] == [
+        {"ok": True, "result": {"results": [{"workItemReadCall": {"action": "read", "operationRef": "operation:work_item.read", "input": {"preparedCallRef": "prepared-call:opaque"}}}]}},
+        {"ok": True, "result": {"results": [{"workItemReadCall": {"action": "read", "operationRef": "operation:work_item.read", "input": {"preparedCallRef": "prepared-call:opaque"}}}]}},
+    ]
+
+
 def test_code_mode_extracts_shallow_prepared_ref_wrapper_before_callback():
     frames = _run(
         """

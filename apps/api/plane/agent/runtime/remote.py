@@ -90,15 +90,11 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         return None
     if _canonical(value, "runtime rejection") != body:
         return None
-    if (
-        failure_subreason is None
-        and fields
-        == {
-            "failureCode": RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
-            "failurePhase": "runtime_configuration",
-            "failureDetail": "dispatch_rejected",
-        }
-    ):
+    if failure_subreason is None and fields == {
+        "failureCode": RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+    }:
         # The pinned runtime service predates failureSubreason propagation.
         # Its redacted response is still safe to classify at this authenticated
         # HTTP seam, so the Plane supervisor can persist a bounded reason.
@@ -137,6 +133,8 @@ class RemoteRuntimeTransport(RuntimeTransport):
         model_call_allowance: int | None = None,
     ) -> None:
         self._base_url = self._validate_url(runtime_url, "runtime URL")
+        if urllib.parse.urlsplit(self._base_url).path not in {"", "/"}:
+            raise ValueError("runtime URL is invalid")
         self._shared_secret = self._text(shared_secret, "runtime shared secret", 4096)
         self._dispatch_path = self._validate_path(dispatch_path)
         if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
@@ -260,10 +258,7 @@ class RemoteRuntimeTransport(RuntimeTransport):
             if len(body) > self._max_response_bytes:
                 raise RuntimeDispatchError("runtime dispatch response exceeds its size bound")
             if response.status != 200:
-                raise (
-                    _structured_rejection(body)
-                    or RuntimeDispatchError("runtime dispatch was rejected")
-                )
+                raise (_structured_rejection(body) or RuntimeDispatchError("runtime dispatch was rejected"))
             return body
         except RuntimeDispatchError:
             raise

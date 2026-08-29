@@ -457,7 +457,7 @@ setup_g4_stack() {
         CORS_ALLOWED_ORIGINS=http://localhost \
         LIVE_SERVER_SECRET_KEY=compose-test-key \
         SECRET_KEY=compose-test-key \
-        docker compose -f "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" config --format json \
+        docker compose --profile agent -f "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" config --format json \
         >"${COMMUNITY_COMPOSE_CONFIG}" || return 1
     [[ -s "${COMMUNITY_COMPOSE_CONFIG}" ]] || return 1
     STACK_STARTED=1

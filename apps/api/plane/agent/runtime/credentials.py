@@ -32,6 +32,7 @@ from .contracts import RUNTIME_BUDGET_MAX_SECONDS
 
 RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS = 1.0
 RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS = RUNTIME_BUDGET_MAX_SECONDS + RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS
+_CREDENTIAL_STATE_SCHEMA_VERSION = 2
 
 try:
     import fcntl
@@ -75,9 +76,7 @@ def credential_failure_subreason(error: RuntimeCredentialError) -> str:
         return "credential_lease_rotated"
     if "oversized" in message or "too many values" in message:
         return "credential_source_oversized"
-    if "source" in message and (
-        "invalid" in message or "not valid" in message or "fields" in message
-    ):
+    if "source" in message and ("invalid" in message or "not valid" in message or "fields" in message):
         return "credential_source_invalid"
     if "source" in message or "unavailable" in message:
         return "credential_source_unavailable"
@@ -97,9 +96,7 @@ _DEPLOYMENT_CREDENTIAL_KEYS = frozenset({"API_KEY", "OPENAI_API_KEY", "XAI_API_K
 # Keep accepting the older shape without host metadata. The current Codex
 # document is exact: its API-key placeholder is null and auth mode is chatgpt.
 _CODEX_AUTH_DOCUMENT_KEYS = frozenset({"last_refresh", "tokens"})
-_CODEX_AUTH_CURRENT_DOCUMENT_KEYS = frozenset(
-    {"OPENAI_API_KEY", "auth_mode", "last_refresh", "tokens"}
-)
+_CODEX_AUTH_CURRENT_DOCUMENT_KEYS = frozenset({"OPENAI_API_KEY", "auth_mode", "last_refresh", "tokens"})
 _CODEX_AUTH_DOCUMENT_SHAPES = (_CODEX_AUTH_DOCUMENT_KEYS, _CODEX_AUTH_CURRENT_DOCUMENT_KEYS)
 _CODEX_AUTH_TOKEN_KEYS = frozenset({"access_token", "account_id", "id_token", "refresh_token"})
 _CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS = 60
@@ -171,9 +168,7 @@ def _parse_deployment_dotenv(text: str) -> str:
 def _parse_codex_auth_document(value: object) -> str:
     if not isinstance(value, dict) or frozenset(value) not in _CODEX_AUTH_DOCUMENT_SHAPES:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
-    if "OPENAI_API_KEY" in value and (
-        value["OPENAI_API_KEY"] is not None or value.get("auth_mode") != "chatgpt"
-    ):
+    if "OPENAI_API_KEY" in value and (value["OPENAI_API_KEY"] is not None or value.get("auth_mode") != "chatgpt"):
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     last_refresh = value["last_refresh"]
     if not isinstance(last_refresh, str) or not last_refresh.strip():
@@ -195,9 +190,7 @@ def _parse_codex_auth_document(value: object) -> str:
         _bounded_deployment_secret(tokens[token_name])
     now = time.time()
     if refreshed_at.timestamp() - now > _CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS:
-        raise RuntimeCredentialError(
-            "deployment credential source requires trusted resolver refresh"
-        )
+        raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
     access_token = _bounded_deployment_secret(tokens["access_token"])
     segments = access_token.split(".")
     if len(segments) != 3 or any(not segment for segment in segments):
@@ -224,9 +217,7 @@ def _parse_codex_auth_document(value: object) -> str:
 
         claims = json.loads(payload, object_pairs_hook=reject_duplicate_claims)
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise RuntimeCredentialError(
-            "deployment credential source requires trusted resolver refresh"
-        ) from exc
+        raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh") from exc
     if not isinstance(claims, dict):
         raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
     issued_at = claims.get("iat")
@@ -256,6 +247,7 @@ def _parse_deployment_credential_document(raw: bytes) -> str:
         raise RuntimeCredentialError("deployment credential source is not UTF-8") from exc
     stripped = text.lstrip()
     if stripped.startswith("{"):
+
         def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
             result: dict[str, object] = {}
             for key, value in pairs:
@@ -488,9 +480,12 @@ class RuntimeCredentialBroker:
         self._validate_lease_id(lease_id)
         with self._lock:
             lease = self._active_lease(lease_id)
-            revoked = replace(lease, revoked_at=self._now())
+            now = self._now()
+            revoked = replace(lease, revoked_at=now)
             self._leases[lease_id] = revoked
-            self._persist_state_change(lambda state: state["revokedLeases"].append(lease_id))
+            self._persist_state_change(
+                lambda state: state["revokedLeases"].update({lease_id: now + RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS})
+            )
             return revoked
 
     def revoke_lease_id(self, lease_id: str) -> bool:
@@ -499,16 +494,18 @@ class RuntimeCredentialBroker:
         self._validate_lease_id(lease_id)
         with self._lock:
             self._refresh_external_state()
+            now = self._now()
             lease = self._leases.get(lease_id)
             if lease is not None and lease.revoked_at is None:
-                self._leases[lease_id] = replace(lease, revoked_at=self._now())
+                self._leases[lease_id] = replace(lease, revoked_at=now)
             state = self._read_state()
-            already_revoked = (
-                (lease is not None and lease.revoked_at is not None)
-                or lease_id in state["revokedLeases"]
-            )
+            already_revoked = (lease is not None and lease.revoked_at is not None) or lease_id in state["revokedLeases"]
             if not already_revoked:
-                self._persist_state_change(lambda current: current["revokedLeases"].append(lease_id))
+                self._persist_state_change(
+                    lambda current: current["revokedLeases"].update(
+                        {lease_id: now + RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS}
+                    )
+                )
             return not already_revoked
 
     def revoke_invocation(self, invocation_ref: str) -> int:
@@ -521,7 +518,11 @@ class RuntimeCredentialBroker:
                 if lease.invocation_ref == invocation_ref and lease.revoked_at is None:
                     self._leases[lease_id] = replace(lease, revoked_at=now)
                     count += 1
-            self._persist_state_change(lambda state: state["revokedInvocations"].update({invocation_ref: now}))
+            self._persist_state_change(
+                lambda state: state["revokedInvocations"].update(
+                    {invocation_ref: now + RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS}
+                )
+            )
             return count
 
     def rotate(self, credential_ref: str) -> int:
@@ -601,7 +602,12 @@ class RuntimeCredentialBroker:
 
     @staticmethod
     def _empty_state() -> dict[str, Any]:
-        return {"revokedLeases": [], "revokedInvocations": {}, "rotationGeneration": {}}
+        return {
+            "schemaVersion": _CREDENTIAL_STATE_SCHEMA_VERSION,
+            "revokedLeases": {},
+            "revokedInvocations": {},
+            "rotationGeneration": {},
+        }
 
     def _read_state(self) -> dict[str, Any]:
         if self._state_file is None or not self._state_file.exists():
@@ -613,13 +619,33 @@ class RuntimeCredentialBroker:
         if not isinstance(value, dict):
             raise RuntimeCredentialError("credential state is invalid")
         state = self._empty_state()
-        if isinstance(value.get("revokedLeases"), list):
-            state["revokedLeases"] = [item for item in value["revokedLeases"] if isinstance(item, str)]
+        now = self._now()
+        current_schema = value.get("schemaVersion") == _CREDENTIAL_STATE_SCHEMA_VERSION
+        if current_schema and isinstance(value.get("revokedLeases"), dict):
+            state["revokedLeases"] = {
+                key: float(item)
+                for key, item in value["revokedLeases"].items()
+                if isinstance(key, str)
+                and isinstance(item, (int, float))
+                and not isinstance(item, bool)
+                and math.isfinite(float(item))
+                and item > now
+            }
+        elif isinstance(value.get("revokedLeases"), list):
+            state["revokedLeases"] = {
+                item: now + RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS
+                for item in value["revokedLeases"]
+                if isinstance(item, str)
+            }
         if isinstance(value.get("revokedInvocations"), dict):
             state["revokedInvocations"] = {
-                key: item
+                key: (float(item) if current_schema else now + RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS)
                 for key, item in value["revokedInvocations"].items()
-                if isinstance(key, str) and isinstance(item, (int, float))
+                if isinstance(key, str)
+                and isinstance(item, (int, float))
+                and not isinstance(item, bool)
+                and math.isfinite(float(item))
+                and (not current_schema or item > now)
             }
         if isinstance(value.get("rotationGeneration"), dict):
             state["rotationGeneration"] = {
@@ -744,16 +770,31 @@ def validate_credential_lease_metadata(
         raise RuntimeCredentialError("credential state is unavailable") from exc
     if not isinstance(raw_state, dict):
         raise RuntimeCredentialError("credential state is invalid")
-    revoked_leases = raw_state.get("revokedLeases", [])
+    revoked_leases = raw_state.get("revokedLeases", {})
     revoked_invocations = raw_state.get("revokedInvocations", {})
     rotation_generation = raw_state.get("rotationGeneration", {})
-    if not isinstance(revoked_leases, list) or not isinstance(revoked_invocations, dict) or not isinstance(
-        rotation_generation, dict
+    current_schema = raw_state.get("schemaVersion") == _CREDENTIAL_STATE_SCHEMA_VERSION
+    if (
+        (current_schema and not isinstance(revoked_leases, dict))
+        or (not current_schema and not isinstance(revoked_leases, list))
+        or not isinstance(revoked_invocations, dict)
+        or not isinstance(rotation_generation, dict)
     ):
         raise RuntimeCredentialError("credential state is invalid")
     lease_id = metadata["leaseId"]
     credential_ref = metadata["credentialRef"]
-    if lease_id in revoked_leases or invocation_ref in revoked_invocations:
+    if current_schema:
+        tombstones = (revoked_leases.get(lease_id), revoked_invocations.get(invocation_ref))
+        if any(
+            isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(float(item))
+            for item in tombstones
+            if item is not None
+        ):
+            raise RuntimeCredentialError("credential state is invalid")
+        revoked = any(item is not None and item > now for item in tombstones)
+    else:
+        revoked = lease_id in revoked_leases or invocation_ref in revoked_invocations
+    if revoked:
         raise RuntimeCredentialError("credential lease is revoked")
     current_rotation = rotation_generation.get(credential_ref, 0)
     if isinstance(current_rotation, bool) or not isinstance(current_rotation, int) or current_rotation < 0:

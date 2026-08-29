@@ -12,6 +12,7 @@ import tempfile
 import textwrap
 import threading
 import time
+import types
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -23,8 +24,6 @@ sys.path.insert(0, str(API_ROOT))
 
 # Import the dependency-free runtime package without importing Plane's Django
 # application package or requiring the host's API environment.
-import types
-
 plane = types.ModuleType("plane")
 plane.__path__ = [str(API_ROOT / "plane")]
 sys.modules.setdefault("plane", plane)
@@ -48,7 +47,10 @@ from plane.agent.runtime.subprocess import (  # noqa: E402
 
 class RuntimeBudgetBoundaryTest(unittest.TestCase):
     def test_progressing_provider_request_stays_inside_plane_budget(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="plane-runtime-budget-", dir="/private/tmp") as temporary:
+        temporary_parent = "/private/tmp" if Path("/private/tmp").is_dir() else None
+        with tempfile.TemporaryDirectory(
+            prefix="plane-runtime-budget-", dir=temporary_parent
+        ) as temporary:
             root = Path(temporary)
             started = threading.Event()
             audits: list[ProviderRelayAudit] = []
@@ -130,13 +132,17 @@ class RuntimeBudgetBoundaryTest(unittest.TestCase):
             invocation = {
                 "remainingBudget": {"durationMs": 300},
                 "lease": {
-                    "expiresAt": (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+                    "expiresAt": (
+                        datetime.now(timezone.utc) + timedelta(seconds=1)
+                    ).isoformat()
                 },
             }
             budget_seconds = runtime_budget_seconds(invocation)
 
             try:
-                with patch.object(RuntimeProcessPolicy, "preexec_fn", return_value=lambda: None):
+                with patch.object(
+                    RuntimeProcessPolicy, "preexec_fn", return_value=lambda: None
+                ):
                     frames = transport.dispatch_payload(
                         payload=(
                             b'{"modelCallAllowance":1}\n'
@@ -144,7 +150,9 @@ class RuntimeBudgetBoundaryTest(unittest.TestCase):
                                 {
                                     "credentials": {
                                         "host": "plane-provider-relay.invalid",
-                                        "invocationSocket": str(relay.descriptor.socket_path),
+                                        "invocationSocket": str(
+                                            relay.descriptor.socket_path
+                                        ),
                                         "path": "/v1/chat/completions",
                                         "provider": "xai",
                                         "relayToken": relay.descriptor.token,
@@ -156,7 +164,13 @@ class RuntimeBudgetBoundaryTest(unittest.TestCase):
                         run_id="run:unittest",
                         invocation_id="invocation:unittest",
                         request_digest="budget-boundary",
-                        command=(sys.executable, "-c", child, "--provider-relay-socket", str(relay.descriptor.socket_path)),
+                        command=(
+                            sys.executable,
+                            "-c",
+                            child,
+                            "--provider-relay-socket",
+                            str(relay.descriptor.socket_path),
+                        ),
                         timeout_seconds=budget_seconds,
                         process_policy=replace(
                             transport._process_policy,
@@ -164,13 +178,18 @@ class RuntimeBudgetBoundaryTest(unittest.TestCase):
                         ),
                     )
             except Exception as exc:
-                self.fail(f"provider-free boundary dispatch failed: {getattr(exc, 'public_failure', lambda: str(exc))()}")
+                failure = (
+                    exc.public_failure() if hasattr(exc, "public_failure") else str(exc)
+                )
+                self.fail(f"provider-free boundary dispatch failed: {failure}")
             finally:
                 relay.close()
 
             self.assertTrue(started.is_set())
             self.assertEqual(frames, ('{"status":"completed"}',))
-            self.assertEqual([audit.phase for audit in audits], ["intent", "started", "completed"])
+            self.assertEqual(
+                [audit.phase for audit in audits], ["intent", "started", "completed"]
+            )
 
     def test_expired_lease_is_not_promoted_to_a_process_budget(self) -> None:
         invocation = {
@@ -178,7 +197,9 @@ class RuntimeBudgetBoundaryTest(unittest.TestCase):
             "lease": {"expiresAt": "2026-08-22T11:59:59Z"},
         }
         with self.assertRaisesRegex(ValueError, "outside its allowed range"):
-            runtime_budget_seconds(invocation, now=datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc))
+            runtime_budget_seconds(
+                invocation, now=datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+            )
 
 
 if __name__ == "__main__":

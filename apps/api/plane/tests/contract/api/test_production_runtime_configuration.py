@@ -103,7 +103,7 @@ def _resolved_community_services() -> dict[str, dict]:
         "Docker is required for the production credential-topology proof; this check cannot be skipped"
     )
     result = subprocess.run(
-        [docker, "compose", "-f", str(COMPOSE_FILE), "config", "--format", "json"],
+        [docker, "compose", "--profile", "agent", "-f", str(COMPOSE_FILE), "config", "--format", "json"],
         cwd=REPOSITORY_ROOT,
         env={
             **os.environ,
@@ -586,13 +586,15 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     assert resolver.is_file()
     assert resolver.stat().st_mode & 0o111
     installed_resolver = (
-        "COPY ./bin/plane-agent-runtime-credential-resolver "
-        "/usr/local/bin/plane-agent-runtime-credential-resolver"
+        "COPY ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver"
     )
     assert installed_resolver in (API_ROOT / "Dockerfile.api").read_text(encoding="utf-8")
+    dockerfile = (API_ROOT / "Dockerfile.api").read_text(encoding="utf-8")
+    assert '"nodejs=22.23.2-r0"' in dockerfile
+    assert '"typescript=5.8.3-r0"' in dockerfile
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
-    assert runtime["image"].startswith("plane-agent-runtime:hermes-d2e65510-g4-1d1012f7")
+    assert runtime["image"].startswith("plane-agent-runtime:hermes-df166ad4-v147-150d5b6d")
     assert "network_mode" not in runtime
     assert "agent_runtime_internal" in runtime["networks"]
     assert not runtime.get("ports")
@@ -618,13 +620,21 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER"] == (
         "command:/usr/local/bin/plane-agent-runtime-credential-resolver"
     )
+    supervisor = services["supervisor"]
+    assert supervisor["command"] == ["python", "manage.py", "agent_supervisor_consumer"]
+    assert supervisor["environment"]["PLANE_AGENT_RUNTIME_HOST_URL"] == "http://supervisor:8091"
     provider_secret = next(
-        secret for secret in services["api"]["secrets"] if secret["source"] == "plane_agent_provider_credentials"
+        secret for secret in supervisor["secrets"] if secret["source"] == "plane_agent_provider_credentials"
     )
     assert provider_secret["target"] == "/run/secrets/plane_agent_provider_credentials"
     assert all(
         secret["source"] != "plane_agent_provider_credentials"
         for secret in services["agent-runtime"].get("secrets", [])
+    )
+    assert all(
+        secret["source"] != "plane_agent_provider_credentials"
+        for service in (services["api"], services["worker"])
+        for secret in service.get("secrets", [])
     )
     assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE"] == (
         "/run/plane-agent-credentials/revocations.json"

@@ -105,6 +105,23 @@ def agent_admin_gateway_issue(agent_admin_gateway_project, workspace, create_use
 
 @pytest.mark.contract
 @pytest.mark.django_db
+def test_oversized_profile_response_rolls_back_mutation(api_key_client, workspace):
+    actor_id = _actor(api_key_client, workspace, "Bounded profile worker").json()["id"]
+
+    response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/profiles/"),
+        {"role": AgentRole.WORKER, "instructions": "x" * 9_000},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "READBACK_TOO_LARGE"
+    assert not ProfileVersion.objects.filter(actor_id=actor_id).exists()
+    assert AgentActor.objects.get(pk=actor_id).active_profile_id is None
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
 def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspace, capsys):
     actor_response = _actor(api_key_client, workspace, "Admin worker")
     actor = actor_response.json()

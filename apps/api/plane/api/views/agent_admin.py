@@ -86,6 +86,17 @@ class AgentAdminAPIView(BaseAPIView):
     permission_classes = [WorkspaceOwnerPermission]
     use_read_replica = False
 
+    def dispatch(self, request, *args, **kwargs):
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            return super().dispatch(request, *args, **kwargs)
+        with transaction.atomic():
+            response = super().dispatch(request, *args, **kwargs)
+            if response.status_code == status.HTTP_400_BAD_REQUEST and response.data == {
+                "error": {"code": "READBACK_TOO_LARGE", "message": "The Agent readback exceeds its bound."}
+            }:
+                transaction.set_rollback(True)
+            return response
+
     @property
     def workspace_slug(self):
         return self.kwargs["slug"]
