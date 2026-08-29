@@ -192,10 +192,13 @@ def test_code_mode_child_isolate_routes_only_typed_host_callbacks():
       }
     """
 
-    result = CodeModeIsolateRunner().run(host, source, {"project_id": "project-1"})
+    result = CodeModeIsolateRunner().run(host, source, {"preparedCallRef": "prepared-call:child-1"})
 
     assert result == {"ok": True, "operationId": "work_item.read"}
-    assert host.callbacks[0][0] == "work_item.read"
+    assert host.callbacks[0][:2] == (
+        "work_item.read",
+        {"preparedCallRef": "prepared-call:child-1"},
+    )
 
 
 def test_code_mode_child_resolves_node_before_restricting_child_path(tmp_path, monkeypatch):
