@@ -132,7 +132,13 @@ def test_agent_runtime_production_accepts_a_bound_url_and_disposable_secret():
 
 def test_agent_runtime_production_starts_without_agent_configuration_when_disabled():
     environment = _settings_environment()
-    environment["PLANE_AGENT_RUNTIME_ENABLED"] = "0"
+    environment.update(
+        {
+            "DATABASE_RUNTIME_URL": "postgresql://plane_runtime:runtime@db/plane",
+            "DATABASE_URL": "postgresql://plane_runtime:runtime@db/plane",
+            "PLANE_AGENT_RUNTIME_ENABLED": "0",
+        }
+    )
     environment.pop("PLANE_AGENT_RUNTIME_URL")
     environment.pop("PLANE_AGENT_RUNTIME_SECRET")
     result = _boot_settings(environment)
