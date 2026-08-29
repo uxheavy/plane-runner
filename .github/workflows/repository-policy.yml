@@ -1,0 +1,38 @@
+name: Repository policy
+
+on:
+  pull_request:
+    branches:
+      - preview
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: repository-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.18.0"
+      - name: Test policy rules
+        run: node --test .github/repository-policy/check.test.mjs
+      - name: Check pull-request diff
+        run: node .github/repository-policy/check.mjs --base "origin/${{ github.base_ref }}"
+
+  quality-gate:
+    name: quality-gate
+    if: always()
+    needs:
+      - policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every routed check
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+        run: test "$POLICY_RESULT" = success

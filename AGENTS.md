@@ -12,6 +12,7 @@ being changed.
 - `pnpm check` - Run all checks (format, lint, types)
 - `pnpm check:lint` - OxLint across all packages
 - `pnpm check:types` - TypeScript type checking
+- `pnpm check:policy` - Check staged repository structure and migration history
 - `pnpm fix` - Auto-fix format and lint issues
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 - `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
@@ -25,7 +26,8 @@ being changed.
 | Task graph | `turbo.json` |
 | Path ownership | `CODEOWNERS` |
 | Pull-request enforcement | `.github/workflows/` |
-| API test setup and conventions | `apps/api/tests/RUNNING_TESTS.md`, `apps/api/tests/TESTING_GUIDE.md` |
+| Repository placement and history rules | `.github/repository-policy/check.mjs`, `.github/repository-policy-exceptions.json` |
+| API test setup and conventions | `apps/api/tests/RUNNING_TESTS.md`, `apps/api/plane/tests/TESTING_GUIDE.md` |
 
 ## Scoped Maps
 
@@ -51,4 +53,4 @@ Prereq (once): `./setup.sh` — generates `apps/api/.env` from `.env.example`.
 - Subset: `docker compose -f docker-compose-test.yml run --rm api-tests pytest -m unit`
 - Teardown: `docker compose -f docker-compose-test.yml down -v`
 
-See `apps/api/tests/RUNNING_TESTS.md` for the full walkthrough and troubleshooting; see `apps/api/tests/TESTING_GUIDE.md` for test conventions and fixtures.
+See `apps/api/tests/RUNNING_TESTS.md` for the full walkthrough and troubleshooting; see `apps/api/plane/tests/TESTING_GUIDE.md` for test conventions and fixtures.
