@@ -128,7 +128,7 @@ export function evaluatePolicy({
     }
 
     const previousPath = change.oldPath ?? change.path;
-    if (["M", "D", "R"].includes(change.status) && isMigration(previousPath)) {
+    if (["M", "D", "R", "T"].includes(change.status) && isMigration(previousPath)) {
       if (!hasExactException(exceptions, previousPath, baseBlob, now)) {
         errors.push(
           violation("RP003", previousPath, "existing migration history is immutable; add a new migration"),
