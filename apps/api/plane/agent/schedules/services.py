@@ -387,7 +387,15 @@ def fire_schedule(
                 created_by=created_by,
             )
     except (AgentDomainError, ValidationError) as exc:
-        return _record_failure(fire, now=now, error=exc, retry_policy=retry_policy)
+        failed = _record_failure(fire, now=now, error=exc, retry_policy=retry_policy)
+        if failed.state == AgentScheduleFireState.EXHAUSTED:
+            locked_schedule.next_fire_at = next_schedule_fire(
+                locked_schedule.cron_expression,
+                locked_schedule.timezone_name,
+                scheduled_for,
+            )
+            locked_schedule.save(update_fields=["next_fire_at", "updated_at"])
+        return failed
     fire.assignment = assignment
     fire.state = AgentScheduleFireState.CREATED
     fire.fired_at = now

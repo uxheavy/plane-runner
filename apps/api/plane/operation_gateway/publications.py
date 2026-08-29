@@ -233,9 +233,10 @@ def _claim_publication(publication_id: str) -> PublicationClaim | None:
         ):
             return None
         if publication.state == OperationGatewayPublication.State.RUNNING:
-            if publication.lease_until is not None and publication.lease_until > now:
+            queued = publication.delivery_result == {"state": "queued"}
+            if not queued and publication.lease_until is not None and publication.lease_until > now:
                 return None
-            if publication.dispatch_started:
+            if not queued and publication.dispatch_started:
                 publication.state = OperationGatewayPublication.State.OUTCOME_UNKNOWN
                 publication.lease_until = None
                 publication.last_error = "Worker lease expired after external delivery began"

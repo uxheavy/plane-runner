@@ -53,6 +53,10 @@ app.conf.beat_schedule = {
         "task": "plane.operation_gateway.tasks.reconcile_publications",
         "schedule": crontab(minute="*/1"),
     },
+    "cleanup-operation-gateway-quotas": {
+        "task": "plane.operation_gateway.tasks.cleanup_gateway_quotas",
+        "schedule": crontab(hour=2, minute=0),
+    },
     "fire-due-agent-schedules": {
         "task": "plane.agent.schedules.tasks.fire_due_agent_schedules",
         "schedule": crontab(minute="*/1"),

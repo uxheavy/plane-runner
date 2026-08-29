@@ -54,7 +54,7 @@ from plane.operation_gateway.publications import (
     schedule_publications_on_commit,
 )
 from plane.operation_gateway.role_boundary import AuditRoleBoundaryError, verify_audit_role_boundary
-from plane.operation_gateway.tasks import dispatch_publication, reconcile_publications
+from plane.operation_gateway.tasks import cleanup_gateway_quotas, dispatch_publication, reconcile_publications
 from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
 
@@ -610,6 +610,42 @@ def test_post_commit_dispatch_loss_is_recovered_from_durable_publications(
     assert reconcile_status == status.HTTP_200_OK
     assert reconciled["ok"] is True
     assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 2
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_publication_reconciliation_claims_one_durable_page_before_enqueue(
+    api_key_client, workspace, gateway_project, gateway_issue
+):
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="reconcile-page",
+        input_data={"name": "Reconciled Name"},
+    )
+    with patch("plane.operation_gateway.publications.schedule_publications"):
+        response = api_key_client.post("/api/v1/operations/", payload, format="json")
+    assert response.status_code == status.HTTP_200_OK
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="reconcile-page")
+
+    with patch("plane.operation_gateway.tasks.dispatch_publication.delay") as enqueue:
+        assert reconcile_publications.run() == 2
+        assert enqueue.call_count == 2
+        assert reconcile_publications.run() == 0
+
+    publications = list(record.publications.order_by("kind"))
+    assert all(publication.state == OperationGatewayPublication.State.RUNNING for publication in publications)
+    assert all(publication.delivery_result == {"state": "queued"} for publication in publications)
+    drain_publications(record)
+    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 2
+
+
+def test_gateway_quota_cleanup_task_uses_the_bounded_cleanup_owner():
+    with patch("plane.operation_gateway.tasks.cleanup_gateway_quota", return_value=7) as cleanup:
+        assert cleanup_gateway_quotas.run() == 7
+    cleanup.assert_called_once_with()
 
 
 @pytest.mark.contract

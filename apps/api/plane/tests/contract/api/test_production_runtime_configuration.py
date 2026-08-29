@@ -81,6 +81,7 @@ def _settings_environment() -> dict[str, str]:
             "LIVE_SERVER_SECRET_KEY": "runtime-settings-test-key",
             "CORS_ALLOWED_ORIGINS": "http://localhost",
             "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+            "PLANE_AGENT_RUNTIME_ENABLED": "1",
             "PLANE_AGENT_RUNTIME_HOST_URL": "http://api:8091",
             "PLANE_AGENT_RUNTIME_SECRET": "runtime-settings-agent-secret-0123456789",
         }
@@ -133,6 +134,11 @@ def _boot_settings(environment: dict[str, str]) -> subprocess.CompletedProcess[s
         text=True,
         check=False,
     )
+
+
+def test_aio_migrator_supplies_the_isolated_migration_contract():
+    supervisor = (REPOSITORY_ROOT / "deployments/aio/community/supervisor.conf").read_text(encoding="utf-8")
+    assert 'environment=PLANE_DB_MIGRATION_MODE="1",DATABASE_MIGRATION_URL="%(ENV_DATABASE_URL)s"' in supervisor
 
 
 def _production_libpq_environment_names() -> frozenset[str]:

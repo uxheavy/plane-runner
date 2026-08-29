@@ -6,14 +6,22 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from celery import shared_task
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from plane.db.models import OperationGatewayPublication
 
-from .publications import dispatch_publication_once
+from .publications import PUBLICATION_LEASE_SECONDS, dispatch_publication_once
+from .quota import cleanup_gateway_quota
 from .role_boundary import audited_gateway_boundary
+
+
+PUBLICATION_RECONCILE_BATCH_SIZE = 500
+QUEUED_DELIVERY_RESULT = {"state": "queued"}
 
 
 @shared_task(bind=True, max_retries=5)
@@ -34,21 +42,45 @@ def dispatch_publication(self, publication_id: str) -> None:
 @shared_task
 @audited_gateway_boundary
 def reconcile_publications() -> int:
-    """Requeue each missing/failed/expired intent independently."""
+    """Claim and requeue one bounded page of missing or expired intents."""
 
     now = timezone.now()
-    publication_ids = list(
-        OperationGatewayPublication.objects.filter(
-            Q(
-                state__in=(
-                    OperationGatewayPublication.State.PENDING,
-                    OperationGatewayPublication.State.RETRYABLE,
+    with transaction.atomic():
+        publications = list(
+            OperationGatewayPublication.objects.select_for_update(skip_locked=True)
+            .filter(
+                Q(
+                    state__in=(
+                        OperationGatewayPublication.State.PENDING,
+                        OperationGatewayPublication.State.RETRYABLE,
+                    )
                 )
+                | Q(state=OperationGatewayPublication.State.RUNNING, lease_until__lt=now)
+                | Q(state=OperationGatewayPublication.State.RUNNING, lease_until__isnull=True)
             )
-            | Q(state=OperationGatewayPublication.State.RUNNING, lease_until__lt=now)
-            | Q(state=OperationGatewayPublication.State.RUNNING, lease_until__isnull=True)
-        ).values_list("id", flat=True)
-    )
-    for publication_id in publication_ids:
-        dispatch_publication.delay(str(publication_id))
+            .order_by("created_at", "id")[:PUBLICATION_RECONCILE_BATCH_SIZE]
+        )
+        for publication in publications:
+            if publication.state in (
+                OperationGatewayPublication.State.PENDING,
+                OperationGatewayPublication.State.RETRYABLE,
+            ):
+                publication.state = OperationGatewayPublication.State.RUNNING
+                publication.dispatch_started = False
+                publication.lease_until = now + timedelta(seconds=PUBLICATION_LEASE_SECONDS)
+                publication.delivery_result = QUEUED_DELIVERY_RESULT
+                publication.save(
+                    update_fields=["state", "dispatch_started", "lease_until", "delivery_result", "updated_at"]
+                )
+        publication_ids = [str(publication.id) for publication in publications]
+        transaction.on_commit(
+            lambda: [dispatch_publication.delay(publication_id) for publication_id in publication_ids],
+            robust=True,
+        )
     return len(publication_ids)
+
+
+@shared_task
+@audited_gateway_boundary
+def cleanup_gateway_quotas() -> int:
+    return cleanup_gateway_quota()

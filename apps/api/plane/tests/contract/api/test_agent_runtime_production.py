@@ -130,6 +130,15 @@ def test_agent_runtime_production_accepts_a_bound_url_and_disposable_secret():
     assert result.stdout.strip() == "plane_runtime"
 
 
+def test_agent_runtime_production_starts_without_agent_configuration_when_disabled():
+    environment = _settings_environment()
+    environment["PLANE_AGENT_RUNTIME_ENABLED"] = "0"
+    environment.pop("PLANE_AGENT_RUNTIME_URL")
+    environment.pop("PLANE_AGENT_RUNTIME_SECRET")
+    result = _boot_settings(environment)
+    assert result.returncode == 0, result.stderr
+
+
 def test_agent_runtime_production_rejects_missing_runtime_url():
     environment = _settings_environment()
     environment.pop("PLANE_AGENT_RUNTIME_URL")

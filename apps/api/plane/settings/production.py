@@ -33,6 +33,11 @@ def _validate_agent_runtime_boundary():
     # below, while normal API/worker processes must fail closed here.
     if PLANE_DB_MIGRATION_MODE or PLANE_DB_PROVISIONER_MODE:
         return
+    enabled = os.environ.get("PLANE_AGENT_RUNTIME_ENABLED", "0")
+    if enabled not in {"0", "1"}:
+        raise ImproperlyConfigured("PLANE_AGENT_RUNTIME_ENABLED must be 0 or 1")
+    if enabled == "0":
+        return
     try:
         runtime_settings = runtime_settings_from_environment(os.environ)
     except RuntimeConfigurationError as exc:

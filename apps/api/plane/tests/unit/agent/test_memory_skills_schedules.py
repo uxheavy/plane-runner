@@ -753,6 +753,9 @@ def test_agent_schedule_dispatcher_is_registered_with_celery_beat():
     assert celery_app.conf.beat_schedule["fire-due-agent-schedules"]["task"] == (
         "plane.agent.schedules.tasks.fire_due_agent_schedules"
     )
+    assert celery_app.conf.beat_schedule["cleanup-operation-gateway-quotas"]["task"] == (
+        "plane.operation_gateway.tasks.cleanup_gateway_quotas"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -784,6 +787,7 @@ def test_schedule_fire_concurrency_and_retry_exhaustion(actor, profile, create_u
     assert schedule.__class__.objects.get(pk=schedule.pk).fires.count() == 1
 
     schedule.refresh_from_db()
+    exhausted_slot = schedule.next_fire_at
     actor.is_active = False
     actor.save(update_fields=["is_active", "updated_at"])
     failed = fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=start)
@@ -795,6 +799,8 @@ def test_schedule_fire_concurrency_and_retry_exhaustion(actor, profile, create_u
     )
     assert failed_again.state == AgentScheduleFireState.EXHAUSTED
     assert failed_again.assignment_id is None
+    schedule.refresh_from_db()
+    assert schedule.next_fire_at == exhausted_slot + timedelta(minutes=5)
 
 
 @pytest.mark.django_db
